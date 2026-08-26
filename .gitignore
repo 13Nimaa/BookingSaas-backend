@@ -1,0 +1,71 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache/options
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# NuGet personal access tokens and credentials
+nuget.config
+
+# Publish output
+[Pp]ublish/
+publish/
+*.pubxml.user
+
+# Test results
+[Tt]est[Rr]esult*/
+TestResult.xml
+coverage*.json
+coverage*.xml
+
+# Entity Framework / database files
+*.db
+*.db-shm
+*.db-wal
+*.mdf
+*.ldf
+
+# User secrets / sensitive config
+appsettings.*.local.json
+secrets.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Windows Installer files
+*.msi
+*.msix
+*.msp
+
+# JetBrains ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
