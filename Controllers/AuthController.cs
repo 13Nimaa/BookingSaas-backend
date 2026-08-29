@@ -7,6 +7,7 @@ using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookingSaas_backend.Controllers;
 
@@ -104,8 +105,23 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthResponseDto>> Refresh(RefreshTokenRequestDto dto)
+    {
+        var hashedToken = _tokenService.HashRefreshToken(dto.RefreshToken);
 
-}
+        var existingToken = await _dbContext.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == hashedToken);
+
+        if (existingToken is null || !existingToken.IsActive)
+            return Unauthorized();
+
+        existingToken.RevokedAt = DateTimeOffset.UtcNow;
+
+        var response = await BuildAutResponseDto(existingToken.User);
+        return Ok(response);
+    }
 [ApiController]
 [Route("api/[controller]")]
 public class TestController : ControllerBase
@@ -125,4 +141,5 @@ public class TestController : ControllerBase
             Roles = roles
         });
     }
+}
 }

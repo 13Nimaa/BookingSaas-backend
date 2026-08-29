@@ -22,3 +22,5 @@ public sealed record LoginDto(
     string AccessToken,
     string RefreshToken,
     DateTimeOffset ExpiresAt);
+    public sealed record RefreshTokenRequestDto(string RefreshToken);
+    public sealed record RefreshTokenResponseDto(string RefreshToken, string accessToken);
