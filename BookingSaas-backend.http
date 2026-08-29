@@ -1,6 +1,17 @@
 @BookingSaas_backend_HostAddress = http://localhost:5135
 
-GET {{BookingSaas_backend_HostAddress}}/weatherforecast/
-Accept: application/json
+GET {{BookingSaas_backend_HostAddress}}/api/test/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjFlM2VlMzE0LTM2MjEtNGRmOS1iMzVjLTYyNmQ3MDYyNWVkNCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6InNhZGVnaGluaW1hMDkwQGdtYWlsLmNvbSIsImp0aSI6IjcwMGRiYmNhLTYxMzUtNDUzMC05NWE0LTc3NjgwNmMyMTBjMSIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkN1c3RvbWVyIiwiZXhwIjoxNzg3OTQ5NjU3LCJpc3MiOiJCb29raW5nU2FhUyIsImF1ZCI6IkJvb2tpbmdTYWFTIn0.StfPWTXNt5HIsrbM3dOjVOv1_4upCFckZitp1entZn4
+
+###
+POST  {{BookingSaas_backend_HostAddress}}/api/Auth/register
+Content-Type: application/json
+
+{
+    "name": "Nima Sadeghi",
+    "email": "sadeghinima090@gmail.com",
+    "password": "Nima@1382",
+    "confirmPassword": "Nima@1382"
+}
 
 ###
