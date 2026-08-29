@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Application.Interfaces;
 using BookingSaas_backend.Application.Dtos.AuthDtos;
 using Domain.Entities;
+using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,17 +17,43 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly ITokenService _tokenService;
+    private readonly AppDbContext _dbContext;
+
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
-        ITokenService tokenService)
+        ITokenService tokenService,
+            AppDbContext dbContext)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _tokenService = tokenService;
-    }
+        _dbContext = dbContext;
 
+    }
+    private async Task<AuthResponseDto> BuildAutResponseDto(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        var accessToken = _tokenService.GenerateAccessToken(user, roles);
+        var rawRefreshToken = _tokenService.GenerateRefreshToken();
+        _dbContext.RefreshTokens.Add(new RefreshToken
+        {
+            Token = _tokenService.HashRefreshToken(rawRefreshToken),
+            UserId = user.Id,
+            User = user,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+        });
+        await _dbContext.SaveChangesAsync();
+
+        return new AuthResponseDto(
+                 new UserDto(user.Id, user.FullName, user.Email!),
+                 accessToken,
+                 rawRefreshToken,
+                 DateTimeOffset.UtcNow.AddMinutes(15)
+             );
+    }
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponseDto>> Register(SignupDto dto)
     {
@@ -54,15 +81,7 @@ public class AuthController : ControllerBase
 
         await _userManager.AddToRoleAsync(user, defaultRole);
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var accessToken = _tokenService.GenerateAccessToken(user, roles);
-
-        var response = new AuthResponseDto(
-            new UserDto(user.Id, user.FullName, user.Email!),
-            accessToken,
-            string.Empty, // RefreshToken — بعداً کامل می‌شه
-            DateTimeOffset.UtcNow.AddMinutes(15)
-        );
+              var response = await BuildAutResponseDto(user);
 
         return Ok(response);
     }
@@ -78,37 +97,32 @@ public class AuthController : ControllerBase
         if (!passwordValid)
             return Unauthorized("Invalid email or password.");
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var accessToken = _tokenService.GenerateAccessToken(user, roles);
+      
+        var response = await BuildAutResponseDto(user);
 
-        var response = new AuthResponseDto(
-            new UserDto(user.Id, user.FullName, user.Email!),
-            accessToken,
-            string.Empty,
-            DateTimeOffset.UtcNow.AddMinutes(15)
-        );
 
         return Ok(response);
     }
-  
-}
-  [ApiController]
-    [Route("api/[controller]")]
-    public class TestController : ControllerBase
-    {
-        [Authorize]
-        [HttpGet("me")]
-        public IActionResult Me()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var email = User.FindFirstValue(ClaimTypes.Email);
-            var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
 
-            return Ok(new
-            {
-                UserId = userId,
-                Email = email,
-                Roles = roles
-            });
-        }
+
+}
+[ApiController]
+[Route("api/[controller]")]
+public class TestController : ControllerBase
+{
+    [Authorize]
+    [HttpGet("me")]
+    public IActionResult Me()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = User.FindFirstValue(ClaimTypes.Email);
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+
+        return Ok(new
+        {
+            UserId = userId,
+            Email = email,
+            Roles = roles
+        });
     }
+}
