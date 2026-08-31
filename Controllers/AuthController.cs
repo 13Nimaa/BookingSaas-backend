@@ -48,6 +48,14 @@ public class AuthController : ControllerBase
         });
         await _dbContext.SaveChangesAsync();
 
+        Response.Cookies.Append("refreshToken", rawRefreshToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddDays(7)
+        });
+
         return new AuthResponseDto(
                  new UserDto(user.Id, user.FullName, user.Email!),
                  accessToken,
@@ -82,7 +90,7 @@ public class AuthController : ControllerBase
 
         await _userManager.AddToRoleAsync(user, defaultRole);
 
-              var response = await BuildAutResponseDto(user);
+        var response = await BuildAutResponseDto(user);
 
         return Ok(response);
     }
@@ -98,7 +106,7 @@ public class AuthController : ControllerBase
         if (!passwordValid)
             return Unauthorized("Invalid email or password.");
 
-      
+
         var response = await BuildAutResponseDto(user);
 
 
@@ -106,9 +114,13 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
-    public async Task<ActionResult<AuthResponseDto>> Refresh(RefreshTokenRequestDto dto)
+    public async Task<ActionResult<AuthResponseDto>> Refresh()
     {
-        var hashedToken = _tokenService.HashRefreshToken(dto.RefreshToken);
+        var rawToken = Request.Cookies["refreshToken"];
+        if (string.IsNullOrEmpty(rawToken))
+            return Unauthorized();
+
+        var hashedToken = _tokenService.HashRefreshToken(rawToken);
 
         var existingToken = await _dbContext.RefreshTokens
             .Include(rt => rt.User)
@@ -122,24 +134,41 @@ public class AuthController : ControllerBase
         var response = await BuildAutResponseDto(existingToken.User);
         return Ok(response);
     }
-[ApiController]
-[Route("api/[controller]")]
-public class TestController : ControllerBase
-{
+    [HttpPost("logout")]
+    public async Task<ActionResult> LogOut()
+    {
+        var rawToken = Request.Cookies["refreshToken"];
+        if (!string.IsNullOrEmpty(rawToken))
+        {
+            var hashedToken = _tokenService.HashRefreshToken(rawToken);
+            var existingToken = await _dbContext.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == hashedToken);
+            if (existingToken is not null && existingToken.IsActive)
+            {
+                existingToken.RevokedAt = DateTimeOffset.UtcNow;
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+
+        Response.Cookies.Delete("refreshToken");
+        return Ok(new { Message = "Logged out successfully." });
+    }
+
+    [HttpGet("session")]
     [Authorize]
-    [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<ActionResult> Session()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var email = User.FindFirstValue(ClaimTypes.Email);
-        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user is null)
+            return Unauthorized();
 
+        var roles = await _userManager.GetRolesAsync(user);
         return Ok(new
         {
-            UserId = userId,
-            Email = email,
+            Authenticated = true,
+            User = new UserDto(user.Id, user.FullName, user.Email!),
             Roles = roles
         });
     }
-}
 }
