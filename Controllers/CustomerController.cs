@@ -70,6 +70,54 @@ public class CustomerController : ControllerBase
 
         return Ok(customers);
     }
+    [Authorize(Roles = "Admin")]
+[HttpGet("{customerId}")]
+public async Task<ActionResult<CustomerDto>> GetById(int businessId, int customerId)
+{
+    var business = await _dbContext.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+    if (business is null)
+        return NotFound();
+
+    if (User.FindFirstValue(ClaimTypes.NameIdentifier) != business.OwnerId)
+        return Forbid();
+
+    var customer = await _dbContext.Customers
+        .Where(c => c.Id == customerId && c.BusinessId == businessId)
+        .Select(c => new CustomerDto(c.Id, c.Name, c.PhoneNumber, c.Notes, c.BusinessId))
+        .FirstOrDefaultAsync();
+
+    if (customer is null)
+        return NotFound();
+
+    return Ok(customer);
+}
+
+[Authorize(Roles = "Admin")]
+[HttpPut("{customerId}")]
+public async Task<ActionResult<CustomerDto>> Update(int businessId, int customerId, UpdateCustomerDto dto)
+{
+    var business = await _dbContext.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+    if (business is null)
+        return NotFound();
+
+    if (User.FindFirstValue(ClaimTypes.NameIdentifier) != business.OwnerId)
+        return Forbid();
+
+    var customer = await _dbContext.Customers
+        .FirstOrDefaultAsync(c => c.Id == customerId && c.BusinessId == businessId);
+
+    if (customer is null)
+        return NotFound();
+
+    customer.Name = dto.Name;
+    customer.PhoneNumber = dto.PhoneNumber;
+    customer.Notes = dto.Notes;
+
+    await _dbContext.SaveChangesAsync();
+
+    var result = new CustomerDto(customer.Id, customer.Name, customer.PhoneNumber, customer.Notes, customer.BusinessId);
+    return Ok(result);
+}
 }
 
 
