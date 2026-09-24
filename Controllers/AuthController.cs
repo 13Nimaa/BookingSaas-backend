@@ -57,7 +57,7 @@ public class AuthController : ControllerBase
         });
 
         return new AuthResponseDto(
-                 new UserDto(user.Id, user.FullName, user.Email!),
+                 new UserDto(user.Id, user.FullName, user.PhoneNumber ?? string.Empty),
                  accessToken,
                  rawRefreshToken,
                  DateTimeOffset.UtcNow.AddMinutes(15)
@@ -69,14 +69,14 @@ public class AuthController : ControllerBase
         if (dto.Password != dto.ConfirmPassword)
             return BadRequest("Passwords do not match.");
 
-        var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+        var existingUser = await _userManager.FindByNameAsync(dto.PhoneNumber);
         if (existingUser is not null)
-            return Conflict("Email is already registered.");
+            return Conflict("Phone number is already registered.");
 
         var user = new ApplicationUser
         {
-            UserName = dto.Email,
-            Email = dto.Email,
+            UserName = dto.PhoneNumber,
+            PhoneNumber = dto.PhoneNumber,
             FullName = dto.Name
         };
 
@@ -98,13 +98,13 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
     {
-        var user = await _userManager.FindByEmailAsync(dto.Email);
+        var user = await _userManager.FindByNameAsync(dto.PhoneNumber);
         if (user is null)
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized("Invalid phone number or password.");
 
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
         if (!passwordValid)
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized("Invalid phone number or password.");
 
 
         var response = await BuildAutResponseDto(user);
@@ -167,7 +167,7 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             Authenticated = true,
-            User = new UserDto(user.Id, user.FullName, user.Email!),
+            User = new UserDto(user.Id, user.FullName, user.PhoneNumber ?? string.Empty),
             Roles = roles
         });
     }

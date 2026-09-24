@@ -4,18 +4,18 @@ namespace  BookingSaas_backend.Application.Dtos.AuthDtos;
 public sealed record UserDto(
     string UserId,
     string Name,
-    string Email
+    string PhoneNumber
 //    string ProfileImage,
 //     string Role)
 );
 public sealed record SignupDto(
     string Name,
-     string Email,
+    string PhoneNumber,
    string Password,
    string ConfirmPassword);
 
 public sealed record LoginDto(
-    string Email,
+    string PhoneNumber,
    string Password);
     public sealed record AuthResponseDto(
     UserDto User,
