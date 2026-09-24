@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Infrastructure.Services;
 using Application.Interfaces;
+using BookingSaas_backend.Application.Interfaces;
+using BookingSaas_backend.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +54,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
 var app = builder.Build();
 
 // ---------- Middleware pipeline ----------
