@@ -18,7 +18,7 @@ public class ServiceController : ControllerBase
     {
         _dbContext = dbContext;
     }
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,BusinessOwner")]
     [HttpPost]
     public async Task<ActionResult<ServiceDto>> Create(int businessId, CreateServiceDto dto)
     {
