@@ -12,6 +12,5 @@ public sealed record UserProfileDto(
 
 public sealed record UpdateProfileDto(
     string FullName,
-    string? PhoneNumber,
     string? Email
 );

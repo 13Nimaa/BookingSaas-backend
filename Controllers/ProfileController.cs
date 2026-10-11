@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Application.Dtos.Profile;
 using Domain.Entities;
-using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -12,24 +11,20 @@ namespace BookingSaas_backend.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-[Route("profile")]
 public class ProfileController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly AppDbContext _dbContext;
 
-    public ProfileController(
-        UserManager<ApplicationUser> userManager,
-        AppDbContext dbContext)
+    public ProfileController(UserManager<ApplicationUser> userManager)
     {
         _userManager = userManager;
-        _dbContext = dbContext;
     }
 
     [HttpGet]
     public async Task<ActionResult<UserProfileDto>> GetProfile()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -39,7 +34,7 @@ public class ProfileController : ControllerBase
             .FirstOrDefaultAsync(u => u.Id == userId);
 
         if (user is null)
-            return NotFound("User not found.");
+            return NotFound("کاربر پیدا نشد.");
 
         var roles = await _userManager.GetRolesAsync(user);
 
@@ -57,12 +52,14 @@ public class ProfileController : ControllerBase
     }
 
     [HttpPut]
-    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateProfileDto dto)
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile(
+        [FromBody] UpdateProfileDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.FullName))
-            return BadRequest("FullName is required.");
+            return BadRequest("نام و نام خانوادگی الزامی است.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -72,30 +69,18 @@ public class ProfileController : ControllerBase
             .FirstOrDefaultAsync(u => u.Id == userId);
 
         if (user is null)
-            return NotFound("User not found.");
+            return NotFound("کاربر پیدا نشد.");
 
-        // If phone number is being changed, ensure it's not taken by another user
-        if (!string.IsNullOrWhiteSpace(dto.PhoneNumber) && dto.PhoneNumber != user.PhoneNumber)
-        {
-            var existingUserWithPhone = await _userManager.Users
-                .FirstOrDefaultAsync(u => (u.PhoneNumber == dto.PhoneNumber || u.UserName == dto.PhoneNumber) && u.Id != userId);
-
-            if (existingUserWithPhone is not null)
-                return Conflict("Phone number is already in use by another account.");
-
-            user.PhoneNumber = dto.PhoneNumber;
-            // Since username is the phone number in this system:
-            user.UserName = dto.PhoneNumber;
-        }
-
-        // If email is being changed, check if email is unique if provided
-        if (!string.IsNullOrWhiteSpace(dto.Email) && dto.Email != user.Email)
+        if (!string.IsNullOrWhiteSpace(dto.Email) &&
+            dto.Email != user.Email)
         {
             var existingUserWithEmail = await _userManager.Users
-                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.Id != userId);
+                .FirstOrDefaultAsync(u =>
+                    u.Email == dto.Email &&
+                    u.Id != userId);
 
             if (existingUserWithEmail is not null)
-                return Conflict("Email is already in use by another account.");
+                return Conflict("این ایمیل قبلاً استفاده شده است.");
 
             user.Email = dto.Email;
         }
@@ -103,8 +88,13 @@ public class ProfileController : ControllerBase
         user.FullName = dto.FullName.Trim();
 
         var updateResult = await _userManager.UpdateAsync(user);
+
         if (!updateResult.Succeeded)
-            return BadRequest(updateResult.Errors.Select(e => e.Description));
+        {
+            return BadRequest(
+                updateResult.Errors.Select(e => e.Description)
+            );
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
 
