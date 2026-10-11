@@ -42,57 +42,74 @@ public class CloudinaryImageUploadService : IImageUploadService
         _cloudinary = new Cloudinary(account);
     }
 
-    public async Task<ImageUploadResponse> UploadAsync(
-        IFormFile file,
-        string folder,
-        CancellationToken cancellationToken = default)
+public async Task<ImageUploadResponse> UploadAsync(
+    IFormFile file,
+    string folder,
+    CancellationToken cancellationToken = default)
+{
+    ValidateFile(file);
+
+    cancellationToken.ThrowIfCancellationRequested();
+
+    await using var stream = file.OpenReadStream();
+
+    var uploadParams = new ImageUploadParams
     {
-        ValidateFile(file);
+        File = new FileDescription(file.FileName, stream),
+        Folder = folder
+    };
 
-        await using var stream = file.OpenReadStream();
+    var result = await _cloudinary.UploadAsync(uploadParams);
 
-        var uploadParams = new ImageUploadParams
-        {
-            File = new FileDescription(
-                file.FileName,
-                stream),
+    cancellationToken.ThrowIfCancellationRequested();
 
-            Folder = folder
-        };
-
-        var result = await _cloudinary.UploadAsync(uploadParams);
-
-        if (result.Error != null)
-        {
-            throw new InvalidOperationException(
-                $"خطا در آپلود تصویر: {result.Error.Message}");
-        }
-
-        return new ImageUploadResponse(
-            result.SecureUrl.ToString(),
-            result.PublicId);
+    if (result.Error != null)
+    {
+        throw new InvalidOperationException(
+            $"خطا در آپلود تصویر: {result.Error.Message}");
     }
 
-    public async Task DeleteAsync(
-        string publicId,
-        CancellationToken cancellationToken = default)
+    if (string.IsNullOrWhiteSpace(result.PublicId) ||
+        result.SecureUrl is null)
     {
-        if (string.IsNullOrWhiteSpace(publicId))
-        {
-            throw new ImageUploadException(
-                "شناسه تصویر برای حذف مشخص نشده است.");
-        }
-
-        var deleteParams = new DeletionParams(publicId);
-
-        var result = await _cloudinary.DestroyAsync(deleteParams);
-
-        if (result.Error != null)
-        {
-            throw new InvalidOperationException(
-                $"خطا در حذف تصویر: {result.Error.Message}");
-        }
+        throw new InvalidOperationException(
+            "اطلاعات تصویر آپلودشده از Cloudinary معتبر نیست.");
     }
+
+    return new ImageUploadResponse(
+        result.SecureUrl.ToString(),
+        result.PublicId);
+}
+public async Task DeleteAsync(
+    string publicId,
+    CancellationToken cancellationToken = default)
+{
+    if (string.IsNullOrWhiteSpace(publicId))
+    {
+        throw new ImageUploadException(
+            "شناسه تصویر برای حذف مشخص نشده است.");
+    }
+
+    cancellationToken.ThrowIfCancellationRequested();
+
+    var deleteParams = new DeletionParams(publicId);
+
+    var result = await _cloudinary.DestroyAsync(deleteParams);
+
+    cancellationToken.ThrowIfCancellationRequested();
+
+    if (result.Error != null)
+    {
+        throw new InvalidOperationException(
+            $"خطا در حذف تصویر: {result.Error.Message}");
+    }
+
+    if (result.Result != "ok" && result.Result != "not found")
+    {
+        throw new InvalidOperationException(
+            "حذف تصویر از Cloudinary با موفقیت انجام نشد.");
+    }
+}
 
     private static void ValidateFile(IFormFile file)
     {

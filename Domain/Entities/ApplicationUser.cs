@@ -6,6 +6,9 @@ public class ApplicationUser : IdentityUser
     public string FullName { get; set; } = default!;
     public UserRole Role { get; set; } // Admin, Staff, Customer
 
+    public string? ProfileImageUrl { get; set; }
+    public string? ProfileImagePublicId { get; set; }
+
     // ناوبری اختیاری بسته به نقش
     public Business? OwnedBusiness { get; set; }
     public Employee? EmployeeProfile { get; set; }
