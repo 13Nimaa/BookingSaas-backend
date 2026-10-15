@@ -6,4 +6,9 @@ public sealed record BusinessDto(
     string City,
     string Address,
     string? Description,
+    string? ProfileImageUrl,
     string OwnerId);
+public sealed record MyBusinessResponse(
+bool HasBusiness,
+BusinessDto? Business
+);

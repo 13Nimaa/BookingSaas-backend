@@ -10,6 +10,7 @@ using Application.Interfaces;
 using BookingSaas_backend.Application.Interfaces;
 using BookingSaas_backend.Application.Services;
 using BookingSaas_backend.Infrastructure.Configuration;
+using BookingSaas_backend.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<CloudinarySettings>(
@@ -26,6 +27,23 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
+
+// ---------- CORS (frontend calls the API directly, no BFF) ----------
+// Origins are configurable via "Frontend:Origins" (see appsettings.json).
+// Must be explicit origins (no AllowAnyOrigin) because the frontend sends
+// credentials ("credentials: include") and an Authorization header.
+var frontendOrigins = builder.Configuration
+    .GetSection("Frontend:Origins")
+    .Get<string[]>() ?? ["http://localhost:3000"];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy => policy
+        .WithOrigins(frontendOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
+});
 
 // ---------- JWT Authentication ----------
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -57,6 +75,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
 var app = builder.Build();
 
 // ---------- Middleware pipeline ----------
@@ -66,6 +85,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("Frontend");
 
 app.UseAuthentication(); // باید قبل از UseAuthorization بیاد
 app.UseAuthorization();

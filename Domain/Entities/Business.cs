@@ -7,6 +7,8 @@ public class Business
     public string City { get; set; } = default!;
     public string Address { get; set; } = default!;
     public string? Description { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public string? ProfileImagePublicId { get; set; }
 
     public string OwnerId { get; set; } = default!;
     public ApplicationUser Owner { get; set; } = default!;

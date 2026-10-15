@@ -68,6 +68,12 @@ namespace BookingSaas_backend.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ProfileImagePublicId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileImageUrl")
+                        .HasColumnType("text");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
@@ -206,6 +212,12 @@ namespace BookingSaas_backend.Migrations
 
                     b.Property<string>("OwnerId")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileImagePublicId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileImageUrl")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
