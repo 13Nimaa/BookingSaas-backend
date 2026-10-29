@@ -28,6 +28,37 @@ public class EmployeeController : ControllerBase
     }
 
     [Authorize(Roles = "BusinessOwner")]
+    [HttpGet]
+    public async Task<ActionResult<List<EmployeeDto>>> GetAll(int businessId)
+    {
+        var ownerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (ownerId is null)
+            return Unauthorized();
+
+        var businessExists = await _dbContext.Businesses
+            .AnyAsync(b =>
+                b.Id == businessId &&
+                b.OwnerId == ownerId);
+
+        if (!businessExists)
+            return NotFound("Business not found.");
+
+        var employees = await _dbContext.Employees
+            .Where(e => e.BusinessId == businessId)
+            .OrderBy(e => e.Id)
+            .Select(e => new EmployeeDto(
+                e.Id,
+                e.UserId,
+                e.User.FullName,
+                e.User.PhoneNumber ?? string.Empty,
+                e.BusinessId))
+            .ToListAsync();
+
+        return Ok(employees);
+    }
+
+    [Authorize(Roles = "BusinessOwner")]
     [HttpPost]
     public async Task<ActionResult<EmployeeDto>> Create(
         int businessId,
@@ -130,5 +161,61 @@ public class EmployeeController : ControllerBase
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    [Authorize(Roles = "BusinessOwner")]
+    [HttpDelete("{employeeId}")]
+    public async Task<IActionResult> Delete(int businessId, int employeeId)
+    {
+        var ownerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (ownerId is null)
+            return Unauthorized();
+
+        var businessExists = await _dbContext.Businesses
+            .AnyAsync(b =>
+                b.Id == businessId &&
+                b.OwnerId == ownerId);
+
+        if (!businessExists)
+            return NotFound("Business not found.");
+
+        var employee = await _dbContext.Employees
+            .FirstOrDefaultAsync(e =>
+                e.Id == employeeId &&
+                e.BusinessId == businessId);
+
+        if (employee is null)
+            return NotFound("Employee not found.");
+
+        var user = await _userManager.FindByIdAsync(employee.UserId);
+
+        await using var transaction =
+            await _dbContext.Database.BeginTransactionAsync();
+
+        try
+        {
+            _dbContext.Employees.Remove(employee);
+
+            await _dbContext.SaveChangesAsync();
+
+            if (user is not null)
+            {
+                await _userManager.RemoveFromRoleAsync(user, "Employee");
+                await _userManager.AddToRoleAsync(user, "Customer");
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+
+        return Ok(new
+        {
+            message = "کارمند با موفقیت حذف شد."
+        });
     }
 }

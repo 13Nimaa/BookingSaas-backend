@@ -10,7 +10,7 @@ namespace BookingSaas_backend.Controllers;
 
 [ApiController]
 [Route("api/business/{businessId}/employees/{employeeId}/working-hours")]
-[Authorize(Roles = "Employee")]
+[Authorize(Roles = "Employee,BusinessOwner")]
 public class WorkingHourController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
@@ -18,6 +18,19 @@ public class WorkingHourController : ControllerBase
     public WorkingHourController(AppDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    // An employee manages their own working hours; a business owner manages
+    // the working hours of any employee in a business they own.
+    private Task<bool> CanManageEmployeeAsync(
+        int businessId,
+        int employeeId,
+        string userId)
+    {
+        return _dbContext.Employees.AnyAsync(e =>
+            e.Id == employeeId &&
+            e.BusinessId == businessId &&
+            (e.UserId == userId || e.Business.OwnerId == userId));
     }
 
     [HttpPost]
@@ -31,13 +44,7 @@ public class WorkingHourController : ControllerBase
         if (userId is null)
             return Unauthorized("کاربر احراز هویت نشده است.");
 
-        var employee = await _dbContext.Employees
-            .FirstOrDefaultAsync(e =>
-                e.Id == employeeId &&
-                e.BusinessId == businessId &&
-                e.UserId == userId);
-
-        if (employee is null)
+        if (!await CanManageEmployeeAsync(businessId, employeeId, userId))
             return NotFound("کارمند موردنظر پیدا نشد.");
 
         if (dto.EndTime <= dto.StartTime)
@@ -95,13 +102,7 @@ public class WorkingHourController : ControllerBase
         if (userId is null)
             return Unauthorized("کاربر احراز هویت نشده است.");
 
-        var employeeExists = await _dbContext.Employees
-            .AnyAsync(e =>
-                e.Id == employeeId &&
-                e.BusinessId == businessId &&
-                e.UserId == userId);
-
-        if (!employeeExists)
+        if (!await CanManageEmployeeAsync(businessId, employeeId, userId))
             return NotFound("کارمند موردنظر پیدا نشد.");
 
         var workingHours = await _dbContext.WorkingHours
@@ -131,13 +132,7 @@ public class WorkingHourController : ControllerBase
         if (userId is null)
             return Unauthorized("کاربر احراز هویت نشده است.");
 
-        var employeeExists = await _dbContext.Employees
-            .AnyAsync(e =>
-                e.Id == employeeId &&
-                e.BusinessId == businessId &&
-                e.UserId == userId);
-
-        if (!employeeExists)
+        if (!await CanManageEmployeeAsync(businessId, employeeId, userId))
             return NotFound("کارمند موردنظر پیدا نشد.");
 
         var workingHour = await _dbContext.WorkingHours
@@ -193,13 +188,7 @@ public class WorkingHourController : ControllerBase
         if (userId is null)
             return Unauthorized("کاربر احراز هویت نشده است.");
 
-        var employeeExists = await _dbContext.Employees
-            .AnyAsync(e =>
-                e.Id == employeeId &&
-                e.BusinessId == businessId &&
-                e.UserId == userId);
-
-        if (!employeeExists)
+        if (!await CanManageEmployeeAsync(businessId, employeeId, userId))
             return NotFound("کارمند موردنظر پیدا نشد.");
 
         var workingHour = await _dbContext.WorkingHours

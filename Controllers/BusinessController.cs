@@ -126,44 +126,49 @@ public class BusinessController : ControllerBase
         return Ok(business);
     }
 
-[Authorize]
-[HttpGet("mine")]
-public async Task<ActionResult<MyBusinessResponse>> GetMine()
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    [Authorize]
+    [HttpGet("mine")]
+    public async Task<ActionResult<MyBusinessResponse>> GetMine()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-    if (userId is null)
-        return Unauthorized();
+        if (userId is null)
+            return Unauthorized();
 
-    var business = await _dbContext.Businesses
-        .Where(b => b.OwnerId == userId)
-        .Select(b => new BusinessDto(
-            b.Id,
-            b.Name,
-            b.City,
-            b.Address,
-            b.Description,
-            b.ProfileImageUrl,
-            b.OwnerId
-        ))
-        .FirstOrDefaultAsync();
+        var business = await _dbContext.Businesses
+            .Where(b => b.OwnerId == userId)
+            .Select(b => new BusinessDto(
+                b.Id,
+                b.Name,
+                b.City,
+                b.Address,
+                b.Description,
+                b.ProfileImageUrl,
+                b.OwnerId
+            ))
+            .FirstOrDefaultAsync();
 
-    var response = new MyBusinessResponse(
-        HasBusiness: business is not null,
-        Business: business
-    );
+        var response = new MyBusinessResponse(
+            HasBusiness: business is not null,
+            Business: business
+        );
 
-    return Ok(response);
-}
-    [Authorize(Roles = "Admin")]
+        return Ok(response);
+    }
+    [Authorize(Roles = "BusinessOwner")]
     [HttpPut("{id}")]
     public async Task<ActionResult<BusinessDto>> Update(
         int id,
         CreateBusinessDto dto)
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
         var business = await _dbContext.Businesses
             .FirstOrDefaultAsync(b => b.Id == id);
-
+        if (userId != business?.OwnerId)
+        {
+            return Forbid();
+        }
         if (business is null)
             return NotFound();
 
