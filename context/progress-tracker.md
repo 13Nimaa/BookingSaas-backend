@@ -1,32 +1,78 @@
-# Authentication audit — 2026-10-29
+# Progress tracker — 2026-10-29
 
-## Status
+## Current status: Business integration tests complete
 
-- Reviewed the authentication implementation and existing integration tests.
-- Ran the existing auth test project without changing production code or tests.
-- Test command: `dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --no-restore --verbosity normal`
-- Result: 6 discovered, 0 passed, 6 failed. All failures were infrastructure failures before the HTTP tests ran: Testcontainers could not connect to Docker at `npipe://./pipe/docker_engine`.
-- No test scenarios were confirmed by execution because the PostgreSQL test container never started.
+- Implemented Business module integration tests in `tests/BookingSaas-backend.Tests/BussinessTests.cs`.
+- Reused existing `AuthFixture` / `AuthCollection` (Testcontainers PostgreSQL + `WebApplicationFactory`).
+- Shared fixture updated with a `FakeImageUploadService` so BusinessController can be constructed without Cloudinary credentials.
+- Production code was not changed.
 
-## Confirmed implementation bugs / fixes needed
+## Test run
 
-1. JWT startup has no configured signing key in the checked-in configuration. `Program.cs:50` reads `Jwt:Key`, and `Program.cs:67` immediately passes it to `Encoding.UTF8.GetBytes`; `appsettings.json` contains issuer and audience but no `Jwt:Key`. Unless an external secret provider supplies it, the application cannot start safely. Add a required test/production secret configuration and fail with a clear configuration error when absent.
+- Command: `dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --verbosity minimal`
+- Prerequisite: Docker Desktop running (Testcontainers). A running `BookingSaas-backend` process locking `bin/Debug` can block builds; stop it before rebuild if needed.
+- **Result: 30 total — 30 passed, 0 failed, 0 skipped**
+  - Auth: 6 passed
+  - Business: 24 passed
 
-2. Raw refresh tokens are returned in JSON responses as well as being set in an HttpOnly cookie. `Controllers/AuthController.cs:59-63` exposes the token in register/login/refresh responses; the business-registration flow does the same at `Controllers/BusinessController.cs:431-438`. This defeats the intended protection of the HttpOnly cookie and makes token theft through frontend JavaScript or response logging possible. Return only the intended transport (prefer the cookie) and update the contract consistently.
+## Business coverage implemented
 
-3. Registration and login do not explicitly validate their authentication inputs beyond password confirmation and Identity password checks. Empty/whitespace phone numbers and names are not constrained by DTO validation, and invalid/empty request fields can reach Identity or produce inconsistent responses. Add explicit request validation and tests for required/format constraints.
+### Creation
+- Authenticated customer can self-register a business via `POST /api/Business/register`, receives new tokens, gains `BusinessOwner`, and owns the created row.
+- Unauthenticated register → `401`.
+- Customer cannot use Admin-only `POST /api/Business` → `403`.
+- Null required fields → `400`.
+- Duplicate register for same owner → `409`.
+- Admin can create via `POST /api/Business` → `201`, `OwnerId` = admin user id.
 
-4. Registration ignores failures from role creation and role assignment. `Controllers/AuthController.cs:88-91` does not inspect either result. A user can be created successfully and then receive an authentication response without the required `Customer` role if role setup fails. Handle the results transactionally and do not issue tokens when role assignment fails.
+### Retrieval
+- Owner retrieves own business via `GET /api/Business/mine`.
+- `mine` does not return another owner’s business.
+- Public `GET /api/Business` and `GET /api/Business/{id}` work without auth.
+- Missing id → `404`; unauthenticated `mine` → `401`.
 
-5. Business registration is authorized for any authenticated user and changes the user's Identity role to `BusinessOwner`, but the existing access token remains unchanged. `Controllers/BusinessController.cs:350-396` does not invalidate/reissue existing access tokens until the client uses the newly returned token. This can leave authorization state inconsistent after role elevation; define and enforce a token/role refresh or revocation strategy.
+### Update
+- Owner can update permitted fields via `PUT /api/Business/{id}`.
+- Other owner / Customer → `403`.
+- Null required fields → `400`.
+- Extra payload fields (`ownerId`, `id`) cannot change ownership or entity id.
+- Nonexistent id update does not succeed (returns `403` with current implementation; see findings).
 
-## Coverage gaps (not confirmed runtime bugs)
+### Deletion
+- **Exists:** `DELETE /api/Business/{id}` is Admin-only → `204`.
+- Owner / Customer → `403`; unauthenticated → `401`; missing id → `404`.
 
-- Existing tests cover only successful registration/login, duplicate registration, incorrect password, missing refresh cookie, and logout revocation.
-- No executable coverage exists for malformed/expired/incorrectly signed JWTs, role restrictions, unknown users, invalid payloads, password confirmation failures, refresh rotation/reuse, cookie attributes, expired/revoked refresh tokens, session rejection, or cross-user access.
-- The test fixture depends on a running Docker daemon and PostgreSQL container; the current environment prevented all six tests from running.
+### Authorization / security
+- URL business-id swap cannot bypass ownership on update.
+- Forbidden responses do not expose exception / stack / Npgsql details.
 
-## Files changed in this audit
+## Findings (not silently fixed)
 
-- `context/progress-tracker.md` only.
-- No production code or test code was changed.
+1. **Update missing business returns `Forbid` instead of `NotFound`.**  
+   `BusinessController.Update` (`Controllers/BusinessController.cs` ~166–173) compares `userId != business?.OwnerId` before the null check. When the row is missing, `business?.OwnerId` is null and a non-null owner gets `403`. Prefer null-check first, then ownership, then update.
+
+2. **No DTO validation beyond nullability.**  
+   `CreateBusinessDto` has no `[Required]` / length attributes. Empty strings can pass API model binding; only JSON `null` reliably yields `400`. DB max lengths exist in `BusinessConfiguration` but are not mirrored on the DTO.
+
+3. **`UpdateBusinessDto` is unused.**  
+   Update accepts `CreateBusinessDto`. Harmless but confusing for API consumers.
+
+4. **Admin create does not assign `BusinessOwner`.**  
+   `POST /api/Business` sets `OwnerId` to the Admin’s id only. That admin cannot call owner-only `PUT` unless also given `BusinessOwner` (or a separate Admin update path is added).
+
+5. **Test infrastructure required a Cloudinary stub.**  
+   `BusinessController` always resolves `IImageUploadService` → `CloudinaryImageUploadService`, which throws when Cloudinary settings are empty. Fixture now replaces it with `FakeImageUploadService` in `AuthTests.cs`.
+
+## Prior auth audit notes (still open; unchanged this pass)
+
+1. JWT signing key missing from checked-in config (`Jwt:Key`).
+2. Refresh tokens returned in JSON as well as HttpOnly cookie.
+3. Weak/missing request validation on auth DTOs.
+4. Registration ignores role create/assign failure results.
+5. Business registration elevates role but old access tokens stay valid until client switches to the new token.
+
+## Files changed this pass
+
+- `tests/BookingSaas-backend.Tests/BussinessTests.cs` — Business integration tests (new).
+- `tests/BookingSaas-backend.Tests/AuthTests.cs` — register `FakeImageUploadService` in fixture.
+- `context/progress-tracker.md` — this update.

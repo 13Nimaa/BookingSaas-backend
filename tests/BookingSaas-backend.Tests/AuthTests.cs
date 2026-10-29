@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using BookingSaas_backend.Application.Interfaces;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -197,7 +199,8 @@ public sealed class AuthFixture : IAsyncLifetime
                 {
                     var existing = services
                         .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) ||
-                                    d.ServiceType == typeof(AppDbContext))
+                                    d.ServiceType == typeof(AppDbContext) ||
+                                    d.ServiceType == typeof(IImageUploadService))
                         .ToList();
 
                     foreach (var descriptor in existing)
@@ -205,6 +208,7 @@ public sealed class AuthFixture : IAsyncLifetime
 
                     services.AddDbContext<AppDbContext>(options =>
                         options.UseNpgsql(_postgres.GetConnectionString()));
+                    services.AddSingleton<IImageUploadService, FakeImageUploadService>();
                 });
             });
 
@@ -225,4 +229,20 @@ public sealed class AuthFixture : IAsyncLifetime
         Factory?.Dispose();
         await _postgres.DisposeAsync();
     }
+}
+
+internal sealed class FakeImageUploadService : IImageUploadService
+{
+    public Task<ImageUploadResponse> UploadAsync(
+        IFormFile file,
+        string folder,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ImageUploadResponse(
+            "https://test.local/image.jpg",
+            "test-public-id"));
+
+    public Task DeleteAsync(
+        string publicId,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

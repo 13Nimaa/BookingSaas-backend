@@ -17,7 +17,7 @@ public class CustomerController : ControllerBase
     {
         _dbContext = dbContext;
     }
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,BusinessOwner")]
     [HttpPost]
     public async Task<ActionResult<CustomerDto>> Create(
         int businessId, CreateCustomerDto dto
@@ -52,7 +52,7 @@ public class CustomerController : ControllerBase
         return CreatedAtAction(nameof(Create), new { businessId }, result);
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,BusinessOwner")]
     [HttpGet]
     public async Task<ActionResult<List<CustomerDto>>> GetAll(int businessId)
     {
@@ -70,7 +70,7 @@ public class CustomerController : ControllerBase
 
         return Ok(customers);
     }
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,BusinessOwner")]
 [HttpGet("{customerId}")]
 public async Task<ActionResult<CustomerDto>> GetById(int businessId, int customerId)
 {
@@ -92,7 +92,7 @@ public async Task<ActionResult<CustomerDto>> GetById(int businessId, int custome
     return Ok(customer);
 }
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,BusinessOwner")]
 [HttpPut("{customerId}")]
 public async Task<ActionResult<CustomerDto>> Update(int businessId, int customerId, UpdateCustomerDto dto)
 {
