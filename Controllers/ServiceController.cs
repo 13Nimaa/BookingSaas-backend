@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Application.Dtos.Business;
 using Application.Dtos.Service;
 using Domain.Entities;
 using Infrastructure.Persistence;
@@ -18,6 +17,12 @@ public class ServiceController : ControllerBase
     {
         _dbContext = dbContext;
     }
+
+    // Admin can manage any business; BusinessOwner only their own.
+    private bool CanManageBusiness(string? ownerId) =>
+        User.IsInRole("Admin") ||
+        User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerId;
+
     [Authorize(Roles = "Admin,BusinessOwner")]
     [HttpPost]
     public async Task<ActionResult<ServiceDto>> Create(int businessId, CreateServiceDto dto)
@@ -25,7 +30,7 @@ public class ServiceController : ControllerBase
         var business = await _dbContext.Businesses.Where(b => b.Id == businessId).FirstOrDefaultAsync();
         if (business is null)
             return NotFound();
-        if (User.FindFirstValue(ClaimTypes.NameIdentifier) != business.OwnerId)
+        if (!CanManageBusiness(business.OwnerId))
             return Forbid();
         var service = new Service
         {
@@ -38,7 +43,7 @@ public class ServiceController : ControllerBase
         await _dbContext.SaveChangesAsync();
         var result = new ServiceDto(service.Id, service.Title, service.Price, service.DurationMinutes, service.BusinessId);
 
-        return CreatedAtAction(nameof(Create), new { businessId }, result);
+        return CreatedAtAction(nameof(GetById), new { businessId, serviceId = service.Id }, result);
     }
 
     [AllowAnonymous]
@@ -48,5 +53,80 @@ public class ServiceController : ControllerBase
         var services = await _dbContext.Services.Where(b => b.BusinessId == businessId).Select(s => new ServiceDto(s.Id, s.Title, s.Price, s.DurationMinutes, s.BusinessId)).ToListAsync();
 
         return Ok(services);
+    }
+
+    [Authorize(Roles = "Admin,BusinessOwner")]
+    [HttpGet("{serviceId}")]
+    public async Task<ActionResult<ServiceDto>> GetById(int businessId, int serviceId)
+    {
+        var business = await _dbContext.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+        if (business is null)
+            return NotFound();
+
+        if (!CanManageBusiness(business.OwnerId))
+            return Forbid();
+
+        var service = await _dbContext.Services
+            .Where(s => s.Id == serviceId && s.BusinessId == businessId)
+            .Select(s => new ServiceDto(s.Id, s.Title, s.Price, s.DurationMinutes, s.BusinessId))
+            .FirstOrDefaultAsync();
+
+        if (service is null)
+            return NotFound();
+
+        return Ok(service);
+    }
+
+    [Authorize(Roles = "Admin,BusinessOwner")]
+    [HttpPut("{serviceId}")]
+    public async Task<ActionResult<ServiceDto>> Update(int businessId, int serviceId, UpdateServiceDto dto)
+    {
+        var business = await _dbContext.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+        if (business is null)
+            return NotFound();
+
+        if (!CanManageBusiness(business.OwnerId))
+            return Forbid();
+
+        var service = await _dbContext.Services
+            .FirstOrDefaultAsync(s => s.Id == serviceId && s.BusinessId == businessId);
+
+        if (service is null)
+            return NotFound();
+
+        service.Title = dto.Title;
+        service.Price = dto.Price;
+        service.DurationMinutes = dto.DurationMinutes;
+
+        await _dbContext.SaveChangesAsync();
+
+        var result = new ServiceDto(service.Id, service.Title, service.Price, service.DurationMinutes, service.BusinessId);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "Admin,BusinessOwner")]
+    [HttpDelete("{serviceId}")]
+    public async Task<IActionResult> Delete(int businessId, int serviceId)
+    {
+        var business = await _dbContext.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+        if (business is null)
+            return NotFound();
+
+        if (!CanManageBusiness(business.OwnerId))
+            return Forbid();
+
+        var service = await _dbContext.Services
+            .FirstOrDefaultAsync(s => s.Id == serviceId && s.BusinessId == businessId);
+
+        if (service is null)
+            return NotFound();
+
+        _dbContext.Services.Remove(service);
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "خدمت با موفقیت حذف شد."
+        });
     }
 }

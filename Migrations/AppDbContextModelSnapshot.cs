@@ -365,6 +365,9 @@ namespace BookingSaas_backend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
                     b.Property<int>("DayOfWeek")
                         .HasColumnType("integer");
 

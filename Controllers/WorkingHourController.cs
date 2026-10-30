@@ -53,7 +53,7 @@ public class WorkingHourController : ControllerBase
         var hasOverlap = await _dbContext.WorkingHours
             .AnyAsync(w =>
                 w.EmployeeId == employeeId &&
-                w.DayOfWeek == dto.DayOfWeek &&
+                w.Date == dto.Date &&
                 w.StartTime < dto.EndTime &&
                 w.EndTime > dto.StartTime);
 
@@ -63,7 +63,8 @@ public class WorkingHourController : ControllerBase
         var workingHour = new WorkingHour
         {
             EmployeeId = employeeId,
-            DayOfWeek = dto.DayOfWeek,
+            Date = dto.Date,
+            DayOfWeek = dto.Date.DayOfWeek,
             StartTime = dto.StartTime,
             EndTime = dto.EndTime
         };
@@ -74,6 +75,7 @@ public class WorkingHourController : ControllerBase
         var result = new WorkingHourDto(
             workingHour.Id,
             workingHour.EmployeeId,
+            workingHour.Date,
             workingHour.DayOfWeek,
             workingHour.StartTime,
             workingHour.EndTime);
@@ -107,11 +109,12 @@ public class WorkingHourController : ControllerBase
 
         var workingHours = await _dbContext.WorkingHours
             .Where(w => w.EmployeeId == employeeId)
-            .OrderBy(w => w.DayOfWeek)
+            .OrderBy(w => w.Date)
             .ThenBy(w => w.StartTime)
             .Select(w => new WorkingHourDto(
                 w.Id,
                 w.EmployeeId,
+                w.Date,
                 w.DayOfWeek,
                 w.StartTime,
                 w.EndTime))
@@ -150,14 +153,15 @@ public class WorkingHourController : ControllerBase
             .AnyAsync(w =>
                 w.Id != id &&
                 w.EmployeeId == employeeId &&
-                w.DayOfWeek == dto.DayOfWeek &&
+                w.Date == dto.Date &&
                 w.StartTime < dto.EndTime &&
                 w.EndTime > dto.StartTime);
 
         if (hasOverlap)
             return Conflict("این بازه زمانی با یکی از ساعات کاری موجود تداخل دارد.");
 
-        workingHour.DayOfWeek = dto.DayOfWeek;
+        workingHour.Date = dto.Date;
+        workingHour.DayOfWeek = dto.Date.DayOfWeek;
         workingHour.StartTime = dto.StartTime;
         workingHour.EndTime = dto.EndTime;
 
@@ -166,6 +170,7 @@ public class WorkingHourController : ControllerBase
         var result = new WorkingHourDto(
             workingHour.Id,
             workingHour.EmployeeId,
+            workingHour.Date,
             workingHour.DayOfWeek,
             workingHour.StartTime,
             workingHour.EndTime);

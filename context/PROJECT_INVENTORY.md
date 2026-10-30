@@ -102,8 +102,9 @@ A user can only be one employee (unique 1:1 with user). Code also rejects if alr
 |-------|------|-------|
 | Id | `int` | |
 | EmployeeId | `int` | Cascade |
-| DayOfWeek | `DayOfWeek` | .NET enum 0=Sunday … 6=Saturday |
-| StartTime / EndTime | `TimeOnly` | Overlap checked in controller |
+| Date | `DateOnly` | Gregorian ISO `yyyy-MM-dd`; convert Jalali on frontend |
+| DayOfWeek | `DayOfWeek` | Derived from `Date` on write |
+| StartTime / EndTime | `TimeOnly` | Overlap checked per same `Date` in controller |
 
 ### `Customer` (per-business CRM + booking identity)
 | Field | Type | Notes |
@@ -342,21 +343,22 @@ Auth: **`Employee` or `BusinessOwner`**. Access if caller is that employee **or*
 
 **CreateWorkingHourDto**
 ```json
-{ "dayOfWeek": 1, "startTime": "09:00:00", "endTime": "17:00:00" }
+{ "date": "2026-10-30", "startTime": "09:00:00", "endTime": "17:00:00" }
 ```
-(`dayOfWeek`: 0=Sunday … 6=Saturday)
+(`date`: Gregorian ISO; frontend converts from Jalali before send)
 
 **WorkingHourDto**
 ```json
 {
   "id": 1,
   "employeeId": 1,
-  "dayOfWeek": 1,
+  "date": "2026-10-30",
+  "dayOfWeek": 5,
   "startTime": "09:00:00",
   "endTime": "17:00:00"
 }
 ```
-Validates end > start; rejects overlapping ranges (`409`).  
+Validates end > start; rejects overlapping ranges on the same date (`409`).  
 **Not public** — booking UI cannot currently read hours without auth.
 
 ---
