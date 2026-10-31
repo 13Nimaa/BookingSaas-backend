@@ -10,14 +10,15 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
     {
         builder.Property(c => c.Name).IsRequired().HasMaxLength(150);
         builder.Property(c => c.PhoneNumber).HasMaxLength(20);
+        builder.Property(c => c.Email).HasMaxLength(256);
+        builder.Property(c => c.IsActive).HasDefaultValue(true);
+        builder.Property(c => c.CreatedAt).IsRequired();
 
-        
         builder.HasOne(c => c.Business)
             .WithMany()
             .HasForeignKey(c => c.BusinessId)
             .OnDelete(DeleteBehavior.Cascade);
 
-    
         builder.HasOne(c => c.User)
             .WithMany()
             .HasForeignKey(c => c.UserId)
@@ -26,6 +27,8 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         builder.HasIndex(c => c.BusinessId);
 
-        builder.HasIndex(c => new { c.BusinessId, c.UserId }).IsUnique().HasFilter("\"UserId\" IS NOT NULL");
+        builder.HasIndex(c => new { c.BusinessId, c.UserId })
+            .IsUnique()
+            .HasFilter("\"UserId\" IS NOT NULL");
     }
 }

@@ -1,4 +1,6 @@
 using System.Text;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Infrastructure.Persistence;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -7,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Infrastructure.Services;
 using Application.Interfaces;
+using Application.Validators.Customer;
 using BookingSaas_backend.Application.Interfaces;
 using BookingSaas_backend.Application.Services;
 using BookingSaas_backend.Infrastructure.Configuration;
@@ -72,6 +75,8 @@ builder.Services.AddAuthorization();
 
 // ---------- Controllers + OpenAPI ----------
 builder.Services.AddControllers();
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateCustomerDtoValidator>();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();

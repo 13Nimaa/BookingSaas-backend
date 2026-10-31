@@ -60,7 +60,9 @@ public class CustomerService : ICustomerService
             BusinessId = businessId,
             UserId = userId,
             Name = user.UserName ?? string.Empty,
-            PhoneNumber = user.PhoneNumber
+            PhoneNumber = user.PhoneNumber,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
         };
 
         _context.Customers.Add(customer);
@@ -91,7 +93,9 @@ public class CustomerService : ICustomerService
             BusinessId = businessId,
             Name = name,
             PhoneNumber = phoneNumber,
-            UserId = null
+            UserId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
         };
 
         _context.Customers.Add(customer);
