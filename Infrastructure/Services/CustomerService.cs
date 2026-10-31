@@ -77,12 +77,13 @@ public class CustomerService : ICustomerService
         string name,
         string phoneNumber)
     {
-        // 1. Check if customer already exists
-        // with the same phone number
+        // Only reuse an existing guest for this business+phone.
+        // Do not attach guest bookings to a registered customer's account.
         var customer = await _context.Customers
             .FirstOrDefaultAsync(c =>
                 c.BusinessId == businessId &&
-                c.PhoneNumber == phoneNumber);
+                c.PhoneNumber == phoneNumber &&
+                c.UserId == null);
 
         if (customer != null)
             return customer;

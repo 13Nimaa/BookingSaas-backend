@@ -42,7 +42,7 @@
 | `ITokenService` | `TokenService` | Registered |
 | `ICustomerService` | `CustomerService` | Registered |
 | `IImageUploadService` | `CloudinaryImageUploadService` | Registered |
-| `IBookingService` | `BookingService` | **NOT registered** — booking API cannot run yet |
+| `IBookingService` | `BookingService` | Registered (create for user + guest) |
 
 ---
 
@@ -69,7 +69,7 @@
 | Name | `string` | max 150 |
 | City | `string` | max 100, indexed |
 | Address | `string` | max 300 |
-| TimeZoneId | `string` | required, max 100, default `Asia/Tehran` (Phase 1 code; migration pending) |
+| TimeZoneId | `string` | required, max 100, default `Asia/Tehran` (migration `BookingDomainFoundation` not applied) |
 | Description | `string?` | |
 | ProfileImageUrl / ProfileImagePublicId | `string?` | |
 | OwnerId | `string` | FK → user, **1 owner = 1 business** |
@@ -83,7 +83,7 @@
 | Id | `int` | |
 | UserId | `string` | 1:1 with user |
 | BusinessId | `int` | Cascade delete with business |
-| Services | M2M via `EmployeeServices` | **No API to manage yet** |
+| Services | M2M via `EmployeeServices` | Managed via `api/employees/{id}/services` |
 | WorkingHours / Appointments | collections | |
 
 A user can only be one employee (unique 1:1 with user). Code also rejects if already an employee anywhere.
@@ -125,7 +125,7 @@ A user can only be one employee (unique 1:1 with user). Code also rejects if alr
 - Create/find guest by phone (`GetOrCreateForGuestAsync`)
 - Merge guest → user if same phone exists
 
-### `Booking` (canonical booking model — Phase 1 domain in progress)
+### `Booking` (canonical booking model — Phase 3 create API live)
 | Field | Type | Notes |
 |-------|------|-------|
 | Id | `int` | |
@@ -133,14 +133,14 @@ A user can only be one employee (unique 1:1 with user). Code also rejects if alr
 | CustomerId | `int` | Restrict delete |
 | ServiceId | `int` | Restrict delete |
 | EmployeeId | `int` | Restrict delete |
-| StartTime / EndTime | `DateTime` | UTC timestamps |
+| StartTime / EndTime | `DateTime` | UTC timestamps; EndTime calculated server-side |
 | Notes | `string?` | |
 | Status | `BookingStatus` | Pending / Confirmed / Cancelled / Completed / **Expired** |
 | CreatorType | `BookingCreatorType` | Customer / Guest / BusinessOwner |
 | CreatedByUserId | `string?` | optional FK → ApplicationUser; SetNull on user delete |
 | CreatedAt | `DateTime` | default UtcNow |
 
-**Table exists** (migration `AddBooking`). **`BookingConfiguration` added in code** (indexes on `(EmployeeId, StartTime)`, `(BusinessId, StartTime)`). **Phase 1 EF migration not created/applied yet.** **No controller**; **service not in DI**. Creator assignment not implemented in `BookingService` yet.
+**Table exists** (migration `AddBooking`). **`BookingConfiguration` + migration `BookingDomainFoundation`** (indexes on `(EmployeeId, StartTime)`, `(BusinessId, StartTime)`; creator fields; Restrict FKs) — **migration not applied** outside Testcontainers. **Create controller + DI wired** (`POST /api/bookings`, `POST /api/bookings/guest`).
 
 ### `Appointment` (older / parallel model — unused by API)
 | Field | Type | Notes |
@@ -329,7 +329,26 @@ Missing: get by id, update, re-assign, employee self-view, public list for booki
 }
 ```
 
-Missing: update, delete, get by id, assign employees ↔ services.
+Missing: none for core CRUD (update/delete/get by id exist).
+
+---
+
+### 3.5b Employee ↔ Service — `api/employees/{employeeId}/services`
+
+All: **`BusinessOwner`** + must own the employee's business (derived from DB; client does not send BusinessId).
+
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| GET | `/` | — | `ServiceDto[]` |
+| POST | `/` | `AssignServiceDto` | `201` `ServiceDto` |
+| DELETE | `/{serviceId}` | — | `{ message }` (Persian) |
+
+**AssignServiceDto**
+```json
+{ "serviceId": 1 }
+```
+
+Rules: employee and service must share the same business; duplicates → `409`; remove blocked if any `Booking` exists for that employee+service pair → `409`; missing assignment → `404`. Join table `EmployeeServices` already has composite PK `(EmployeesId, ServicesId)`.
 
 ---
 
@@ -398,11 +417,14 @@ Missing: delete, search, link to user, booking history for customer.
 
 ---
 
-### 3.8 Bookings — **NO CONTROLLER**
+### 3.8 Bookings — `api/bookings`
 
-Prepared but not exposed:
+| Method | Path | Auth | Request | Response |
+|--------|------|------|---------|----------|
+| POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
+| POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
 
-**CreateBookingDto** (authenticated user booking)
+**CreateBookingDto** (CustomerId/UserId not accepted; identity from JWT)
 ```json
 {
   "businessId": 1,
@@ -412,6 +434,7 @@ Prepared but not exposed:
   "endTime": "2026-01-01T10:30:00Z"
 }
 ```
+`endTime` in the body is ignored; server sets `EndTime = StartTime + Service.DurationMinutes`.
 
 **CreateGuestBookingDto**
 ```json
@@ -426,8 +449,25 @@ Prepared but not exposed:
 }
 ```
 
-`BookingService` creates `Booking` with status `Pending` via `ICustomerService`.  
-`BookingDto.cs` is an **empty file**. No list/cancel/confirm/complete endpoints.
+**BookingDto**
+```json
+{
+  "id": 1,
+  "businessId": 1,
+  "customerId": 1,
+  "serviceId": 1,
+  "employeeId": 1,
+  "startTime": "...",
+  "endTime": "...",
+  "notes": null,
+  "status": 0,
+  "creatorType": 0,
+  "createdByUserId": "string|null",
+  "createdAt": "..."
+}
+```
+
+Rules: business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. No list/cancel/confirm/complete/availability yet.
 
 ---
 
@@ -440,6 +480,8 @@ Prepared but not exposed:
 | `20260920_updateCustomerForCrm` | Customer CRM fields / business scoping |
 | `20260924_AddBooking` | `Bookings` table |
 | `20261015_AddProfileImageFields` | User + business Cloudinary image fields |
+| `20261031_AddCustomerCrmFields` | Customer CRM email / IsActive / indexes |
+| `20261031_BookingDomainFoundation` | Business.TimeZoneId; Booking creator fields; Restrict FKs + time indexes (**not applied**) |
 
 ---
 
@@ -475,9 +517,9 @@ Password policy: min length 6, non-alphanumeric not required.
 | Working hours CRUD (employee/owner) | Done |
 | CRM customer CRUD (partial; Admin-gated) | Partial |
 | Guest/user customer get-or-create service | Done (service layer only) |
-| Booking create (user + guest) | **Service only — not wired** |
+| Booking create (user + guest) | Done (`POST /api/bookings`, `/guest`) |
 | Appointment entity | Schema only — unused |
-| Employee ↔ Service assignment | Schema only — unused |
+| Employee ↔ Service assignment | Done (`EmployeeServicesController`) |
 | Availability / free slots | Missing |
 | Booking lifecycle (confirm/cancel/complete/list) | Missing |
 | Payments / notifications / reviews | Missing |
@@ -489,14 +531,12 @@ Password policy: min length 6, non-alphanumeric not required.
 ## 7. What you still NEED to implement (priority-oriented)
 
 ### P0 — Core booking product (biggest gap)
-1. **Register `IBookingService` in DI** and add `BookingController`.
-2. **Endpoints (suggested):**
-   - `POST /api/bookings` — authenticated (`CreateBookingDto`)
-   - `POST /api/bookings/guest` — guest (`CreateGuestBookingDto`)
+1. ~~**Register `IBookingService` in DI** and add create `BookingController`.~~ Done (Phase 3).
+2. **Remaining booking endpoints (suggested):**
    - `GET /api/bookings/mine` — customer’s bookings
    - `GET /api/business/{id}/bookings` — owner/employee calendar
    - `PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete
-3. Fill **`BookingDto`** response shape.
+3. ~~Fill **`BookingDto`** response shape.~~ Done.
 4. **Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).
 5. **Overlap validation** on create (use index pattern already on Appointments, or add same for Bookings).
 6. **Decide: `Booking` vs `Appointment`** — pick one; migrate/remove the other to avoid dual sources of truth.
@@ -505,7 +545,7 @@ Password policy: min length 6, non-alphanumeric not required.
 7. Fix **CustomerController** roles: allow `BusinessOwner` (and maybe `Employee`), not only `Admin`.
 8. Service **Update / Delete / GetById**.
 9. Public or booking-safe **employee list** + **working hours read** for customers.
-10. **Employee ↔ Service** assign/unassign endpoints (join table already exists).
+10. ~~**Employee ↔ Service** assign/unassign endpoints~~ — Done.
 11. Customer **Delete** + search by phone/name.
 12. Use `UpdateBusinessDto` consistently (or delete unused DTO).
 
@@ -537,8 +577,6 @@ Password policy: min length 6, non-alphanumeric not required.
 | Customer CRM locked to `Admin` | Owners who own the business get `Forbid` unless they somehow have Admin role |
 | Business `POST /` vs `/register` | Admin creates without role upgrade; register upgrades to BusinessOwner |
 | `Update` business uses `CreateBusinessDto` | `UpdateBusinessDto` unused |
-| `BookingService` not in DI | Cannot inject; no HTTP surface |
-| Empty `BookingDto.cs` | Response contract undefined |
 | Dual booking models | `Booking` + `Appointment` |
 | `UserRole` enum vs Identity roles | Confusing / dead field |
 | JWT Key absent from committed config | Must be in User Secrets locally |
@@ -573,10 +611,11 @@ Controllers/
   ProfileController.cs
   BusinessController.cs
   EmployeeController.cs
+  EmployeeServicesController.cs
   ServiceController.cs
   WorkingHourController.cs
   CustomerController.cs
-  (missing) BookingController.cs
+  BookingController.cs
 
 Domain/Entities/
   ApplicationUser, Business, Employee, Service, WorkingHour,

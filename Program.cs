@@ -80,6 +80,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateCustomerDtoValidator>
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
 var app = builder.Build();
 

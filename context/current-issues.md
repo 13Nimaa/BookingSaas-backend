@@ -26,12 +26,11 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 
 ## Booking
 
-1. **`IBookingService` not registered in DI** — booking HTTP cannot run yet.
-2. **No `BookingController`** — by design until a later phase.
-3. **`BookingDto.cs` empty** — response contract undefined.
-4. **Dual models:** `Booking` (canonical going forward) vs unused `Appointment` — do not delete Appointment without an explicit migrate plan.
-5. **Phase 1 domain foundation in progress:** `Expired` status, `BookingCreatorType`, `CreatedByUserId`, `Business.TimeZoneId`, `BookingConfiguration` added in code; EF migration + build verification still outstanding.
-6. Creator assignment is **not** implemented in `BookingService` yet (Phase 1 domain-only).
+1. **Dual models:** `Booking` (canonical going forward) vs unused `Appointment` — do not delete Appointment without an explicit migrate plan.
+2. **Phase 1 domain foundation migration not applied:** `20261031213454_BookingDomainFoundation` (creator fields, `TimeZoneId`, Restrict FKs, indexes) exists in repo but is **not applied** to local/Docker DB outside Testcontainers.
+3. **No availability / overlap / expiration yet** — create API accepts Pending bookings without working-hours or concurrency checks (by design until later phases).
+4. **No list / status-transition / owner-create endpoints** yet.
+5. ~~`IBookingService` DI / `BookingController` / empty `BookingDto` / creator assignment~~ — Done in Phase 3.
 
 ## Roles dualism
 

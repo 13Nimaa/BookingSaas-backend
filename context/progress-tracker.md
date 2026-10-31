@@ -1,8 +1,8 @@
 # Backend progress
 
 **Last updated:** 2026-11-01  
-**Current task:** Phase 1 — Booking domain foundation (`feature-spec/02-booking-foundation.md`) — **In progress**  
-**Prior:** Business integration tests — complete  
+**Current task:** Phase 3 — Booking Creation API (`feature-spec/04-booking=creation-API.md`) — **Complete**  
+**Prior:** Phase 2 — Employee-Service Management API — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
 
 ---
@@ -23,42 +23,102 @@ Existing docs kept: `PROJECT_INVENTORY.md`, `feature-spec/*`, API frontend notes
 
 ---
 
-# Phase 1 — Booking domain foundation
+# Phase 3 — Booking Creation API
 
-Spec: `context/feature-spec/02-booking-foundation.md`  
-**Do not start Phase 2 until this phase is approved.**
+Spec: `context/feature-spec/04-booking=creation-API.md`
 
 | Area | Status |
 |------|--------|
-| `BookingStatus.Expired` appended (preserve int values) | Done (code) |
-| `BookingCreatorType` + `CreatorType` / `CreatedByUserId` / `CreatedByUser` | Done (code) |
-| `Business.TimeZoneId` required, default `Asia/Tehran` | Done (code) |
-| `BookingConfiguration` (Restrict on Business/Customer/Employee/Service; SetNull on CreatedByUser; employee/time indexes) | Done (code) |
-| Auto-register via `ApplyConfigurationsFromAssembly` | Done (existing mechanism) |
-| EF migration created (not applied) | Pending |
-| `dotnet build` verification | Pending |
-| BookingController / availability / BackgroundService / creator assignment in services | Out of scope |
+| `POST /api/bookings` (authenticated) | Done |
+| `POST /api/bookings/guest` (anonymous) | Done |
+| Shared selection validation (business/service/employee/assignment) | Done |
+| EndTime = StartTime + Service.DurationMinutes (client EndTime ignored) | Done |
+| CreatorType / CreatedByUserId server-side | Done |
+| `BookingDto` response shape | Done |
+| FluentValidation (CreateBooking / CreateGuestBooking) | Done |
+| `IBookingService` DI registration | Done |
+| Guest phone must not link to registered customer account | Done (`GetOrCreateForGuestAsync` guests-only) |
+| Integration tests (9) | Done |
+| Availability / overlap / expiration / owner create | Out of scope |
+| Schema migration | Not needed |
 
-## Files (this phase so far)
+## Files (this phase)
 
 | Path | Role |
 |------|------|
-| `Domain/Entities/Booking.cs` | Status + creator enum/props |
-| `Domain/Entities/Business.cs` | `TimeZoneId` |
-| `Infrastructure/Persistence/Configurations/BusinessConfiguration.cs` | Required timezone + default |
-| `Infrastructure/Persistence/Configurations/BookingConfiguration.cs` | Relationships, deletes, indexes |
+| `Controllers/BookingController.cs` | Authenticated + guest create |
+| `Infrastructure/Services/BookingService.Cs` | Validation, EndTime calc, creator fields |
+| `Infrastructure/Services/CustomerService.cs` | Guest lookup ignores registered customers |
+| `Application/Dtos/Booking/BookingDto.cs` | Response DTO |
+| `Application/Validators/Booking/*` | FluentValidation |
+| `Program.cs` | `IBookingService` registration |
+| `tests/.../BookingCreationTests.cs` | Integration coverage |
 
-## Verify (when resuming Phase 1)
+## Test run
 
 ```bash
-dotnet ef migrations add BookingDomainFoundation --output-dir Migrations
-# Inspect migration — do NOT database update
-dotnet build
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingCreationTests" --verbosity minimal
 ```
+
+Result: **9 total — 9 passed**. Docker required.
+
+---
+
+# Phase 2 — Employee-Service Management API
+
+Spec: `context/feature-spec/03-employee-connection-to-service.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/employees/{employeeId}/services` | Done |
+| `POST /api/employees/{employeeId}/services` | Done |
+| `DELETE /api/employees/{employeeId}/services/{serviceId}` | Done |
+| Ownership via authenticated owner + employee.BusinessId | Done |
+| Same-business check on assign | Done |
+| Duplicate prevention (app check + PK + unique-violation catch) | Done |
+| Block remove when Booking history exists for pair | Done |
+| FluentValidation on `AssignServiceDto` | Done |
+| Integration tests (6) | Done |
+| EmployeeServices schema migration | Not needed (composite PK already exists) |
+| BookingController / BookingService changes | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/EmployeeServicesController.cs` | List / assign / remove |
+| `Application/Dtos/Employee/AssignServiceDto.cs` | Request body |
+| `Application/Validators/Employee/AssignServiceDtoValidator.cs` | FluentValidation |
+| `tests/.../EmployeeServicesTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~EmployeeServicesTests" --verbosity minimal
+```
+
+Result: **6 total — 6 passed**. Docker required.
+
+---
+
+# Phase 1 — Booking domain foundation
+
+Spec: `context/feature-spec/02-booking-foundation.md`
+
+| Area | Status |
+|------|--------|
+| `BookingStatus.Expired` appended (preserve int values) | Done |
+| `BookingCreatorType` + `CreatorType` / `CreatedByUserId` / `CreatedByUser` | Done |
+| `Business.TimeZoneId` required, default `Asia/Tehran` | Done |
+| `BookingConfiguration` (Restrict on Business/Customer/Employee/Service; SetNull on CreatedByUser; employee/time indexes) | Done |
+| Auto-register via `ApplyConfigurationsFromAssembly` | Done |
+| EF migration `20261031213454_BookingDomainFoundation` | Done (created, **not applied**) |
+| `dotnet build` verification | Done |
+| BookingController / availability / BackgroundService / creator assignment in services | Out of scope (controller + creator done in Phase 3) |
 
 ## Timezone decision
 
-Project is Iran-focused (Iranian phone conventions, Jalali on frontend, sample cities like Mashhad). `TimeZoneId` is required with default / DB default `Asia/Tehran`. Multi-country support later should accept timezone on create/update DTOs.
+Project is Iran-focused. `TimeZoneId` is required with default / DB default `Asia/Tehran`.
 
 ---
 
@@ -88,7 +148,7 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 
 ---
 
-# Next (after Phase 1 approval)
+# Next
 
-1. Finish Phase 1 migration + build report.
-2. Later phases per booking architecture: DI + controller, availability, expiration scheduling, creator assignment — only when specified.
+1. Apply `BookingDomainFoundation` migration when ready (`dotnet ef database update` — only on request).
+2. Later booking phases: availability, overlap/exclusion, expiration BackgroundService, owner approval/status transitions — only when specified.
