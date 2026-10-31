@@ -1,78 +1,94 @@
-# Progress tracker — 2026-10-29
+# Backend progress
 
-## Current status: Business integration tests complete
+**Last updated:** 2026-11-01  
+**Current task:** Phase 1 — Booking domain foundation (`feature-spec/02-booking-foundation.md`) — **In progress**  
+**Prior:** Business integration tests — complete  
+**Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
 
-- Implemented Business module integration tests in `tests/BookingSaas-backend.Tests/BussinessTests.cs`.
-- Reused existing `AuthFixture` / `AuthCollection` (Testcontainers PostgreSQL + `WebApplicationFactory`).
-- Shared fixture updated with a `FakeImageUploadService` so BusinessController can be constructed without Cloudinary credentials.
-- Production code was not changed.
+---
 
-## Test run
+# Agent context suite
 
-- Command: `dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --verbosity minimal`
-- Prerequisite: Docker Desktop running (Testcontainers). A running `BookingSaas-backend` process locking `bin/Debug` can block builds; stop it before rebuild if needed.
-- **Result: 30 total — 30 passed, 0 failed, 0 skipped**
-  - Auth: 6 passed
-  - Business: 24 passed
+| Area | Status |
+|------|--------|
+| Root + `context/AGENTS.md` | Reading order for agents | Done |
+| `project-overview.md` | Product goals / scope | Done |
+| `architecture-context.md` | Layers + invariants | Done |
+| `code-standards.md` | Backend conventions | Done |
+| `ai-workflow-rules.md` | Scoping + doc sync | Done |
+| `current-issues.md` | Open debt / findings | Done |
+| `progress-tracker.md` | This file (frontend-style) | Done |
 
-## Business coverage implemented
+Existing docs kept: `PROJECT_INVENTORY.md`, `feature-spec/*`, API frontend notes, test notes.
 
-### Creation
-- Authenticated customer can self-register a business via `POST /api/Business/register`, receives new tokens, gains `BusinessOwner`, and owns the created row.
-- Unauthenticated register → `401`.
-- Customer cannot use Admin-only `POST /api/Business` → `403`.
-- Null required fields → `400`.
-- Duplicate register for same owner → `409`.
-- Admin can create via `POST /api/Business` → `201`, `OwnerId` = admin user id.
+---
 
-### Retrieval
-- Owner retrieves own business via `GET /api/Business/mine`.
-- `mine` does not return another owner’s business.
-- Public `GET /api/Business` and `GET /api/Business/{id}` work without auth.
-- Missing id → `404`; unauthenticated `mine` → `401`.
+# Phase 1 — Booking domain foundation
 
-### Update
-- Owner can update permitted fields via `PUT /api/Business/{id}`.
-- Other owner / Customer → `403`.
-- Null required fields → `400`.
-- Extra payload fields (`ownerId`, `id`) cannot change ownership or entity id.
-- Nonexistent id update does not succeed (returns `403` with current implementation; see findings).
+Spec: `context/feature-spec/02-booking-foundation.md`  
+**Do not start Phase 2 until this phase is approved.**
 
-### Deletion
-- **Exists:** `DELETE /api/Business/{id}` is Admin-only → `204`.
-- Owner / Customer → `403`; unauthenticated → `401`; missing id → `404`.
+| Area | Status |
+|------|--------|
+| `BookingStatus.Expired` appended (preserve int values) | Done (code) |
+| `BookingCreatorType` + `CreatorType` / `CreatedByUserId` / `CreatedByUser` | Done (code) |
+| `Business.TimeZoneId` required, default `Asia/Tehran` | Done (code) |
+| `BookingConfiguration` (Restrict on Business/Customer/Employee/Service; SetNull on CreatedByUser; employee/time indexes) | Done (code) |
+| Auto-register via `ApplyConfigurationsFromAssembly` | Done (existing mechanism) |
+| EF migration created (not applied) | Pending |
+| `dotnet build` verification | Pending |
+| BookingController / availability / BackgroundService / creator assignment in services | Out of scope |
 
-### Authorization / security
-- URL business-id swap cannot bypass ownership on update.
-- Forbidden responses do not expose exception / stack / Npgsql details.
+## Files (this phase so far)
 
-## Findings (not silently fixed)
+| Path | Role |
+|------|------|
+| `Domain/Entities/Booking.cs` | Status + creator enum/props |
+| `Domain/Entities/Business.cs` | `TimeZoneId` |
+| `Infrastructure/Persistence/Configurations/BusinessConfiguration.cs` | Required timezone + default |
+| `Infrastructure/Persistence/Configurations/BookingConfiguration.cs` | Relationships, deletes, indexes |
 
-1. **Update missing business returns `Forbid` instead of `NotFound`.**  
-   `BusinessController.Update` (`Controllers/BusinessController.cs` ~166–173) compares `userId != business?.OwnerId` before the null check. When the row is missing, `business?.OwnerId` is null and a non-null owner gets `403`. Prefer null-check first, then ownership, then update.
+## Verify (when resuming Phase 1)
 
-2. **No DTO validation beyond nullability.**  
-   `CreateBusinessDto` has no `[Required]` / length attributes. Empty strings can pass API model binding; only JSON `null` reliably yields `400`. DB max lengths exist in `BusinessConfiguration` but are not mirrored on the DTO.
+```bash
+dotnet ef migrations add BookingDomainFoundation --output-dir Migrations
+# Inspect migration — do NOT database update
+dotnet build
+```
 
-3. **`UpdateBusinessDto` is unused.**  
-   Update accepts `CreateBusinessDto`. Harmless but confusing for API consumers.
+## Timezone decision
 
-4. **Admin create does not assign `BusinessOwner`.**  
-   `POST /api/Business` sets `OwnerId` to the Admin’s id only. That admin cannot call owner-only `PUT` unless also given `BusinessOwner` (or a separate Admin update path is added).
+Project is Iran-focused (Iranian phone conventions, Jalali on frontend, sample cities like Mashhad). `TimeZoneId` is required with default / DB default `Asia/Tehran`. Multi-country support later should accept timezone on create/update DTOs.
 
-5. **Test infrastructure required a Cloudinary stub.**  
-   `BusinessController` always resolves `IImageUploadService` → `CloudinaryImageUploadService`, which throws when Cloudinary settings are empty. Fixture now replaces it with `FakeImageUploadService` in `AuthTests.cs`.
+---
 
-## Prior auth audit notes (still open; unchanged this pass)
+# Business integration tests — previously complete
 
-1. JWT signing key missing from checked-in config (`Jwt:Key`).
-2. Refresh tokens returned in JSON as well as HttpOnly cookie.
-3. Weak/missing request validation on auth DTOs.
-4. Registration ignores role create/assign failure results.
-5. Business registration elevates role but old access tokens stay valid until client switches to the new token.
+| Area | Status |
+|------|--------|
+| Auth fixture reuse + FakeImageUploadService | Done |
+| Business create / retrieve / update / delete / authz tests | Done |
+| Production business code unchanged | Done |
 
-## Files changed this pass
+## Test run (historical)
 
-- `tests/BookingSaas-backend.Tests/BussinessTests.cs` — Business integration tests (new).
-- `tests/BookingSaas-backend.Tests/AuthTests.cs` — register `FakeImageUploadService` in fixture.
-- `context/progress-tracker.md` — this update.
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --verbosity minimal
+```
+
+Result recorded: **30 total — 30 passed** (Auth 6, Business 24). Docker required.
+
+Findings from that pass live in `current-issues.md` (Business API + Auth sections).
+
+---
+
+# Customer CRM (`feature-spec/01-complete-customers.md`) — previously complete
+
+CRM fields, validators, list/query, soft-active behavior — see inventory. Spec folder retained for history.
+
+---
+
+# Next (after Phase 1 approval)
+
+1. Finish Phase 1 migration + build report.
+2. Later phases per booking architecture: DI + controller, availability, expiration scheduling, creator assignment — only when specified.

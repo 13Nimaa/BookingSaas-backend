@@ -11,6 +11,7 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.Property(b => b.Name).IsRequired().HasMaxLength(150);
         builder.Property(b => b.City).IsRequired().HasMaxLength(100);
         builder.Property(b => b.Address).HasMaxLength(300);
+        builder.Property(b => b.TimeZoneId).IsRequired().HasMaxLength(100).HasDefaultValue("Asia/Tehran");
 
         builder.HasOne(b => b.Owner)
             .WithOne(u => u.OwnedBusiness)

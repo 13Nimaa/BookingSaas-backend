@@ -69,6 +69,7 @@
 | Name | `string` | max 150 |
 | City | `string` | max 100, indexed |
 | Address | `string` | max 300 |
+| TimeZoneId | `string` | required, max 100, default `Asia/Tehran` (Phase 1 code; migration pending) |
 | Description | `string?` | |
 | ProfileImageUrl / ProfileImagePublicId | `string?` | |
 | OwnerId | `string` | FK → user, **1 owner = 1 business** |
@@ -124,20 +125,22 @@ A user can only be one employee (unique 1:1 with user). Code also rejects if alr
 - Create/find guest by phone (`GetOrCreateForGuestAsync`)
 - Merge guest → user if same phone exists
 
-### `Booking` (newer booking model — partially built)
+### `Booking` (canonical booking model — Phase 1 domain in progress)
 | Field | Type | Notes |
 |-------|------|-------|
 | Id | `int` | |
-| BusinessId | `int` | |
-| CustomerId | `int` | |
-| ServiceId | `int` | |
-| EmployeeId | `int` | |
+| BusinessId | `int` | Restrict delete (BookingConfiguration) |
+| CustomerId | `int` | Restrict delete |
+| ServiceId | `int` | Restrict delete |
+| EmployeeId | `int` | Restrict delete |
 | StartTime / EndTime | `DateTime` | UTC timestamps |
 | Notes | `string?` | |
-| Status | `BookingStatus` | Pending / Confirmed / Cancelled / Completed |
+| Status | `BookingStatus` | Pending / Confirmed / Cancelled / Completed / **Expired** |
+| CreatorType | `BookingCreatorType` | Customer / Guest / BusinessOwner |
+| CreatedByUserId | `string?` | optional FK → ApplicationUser; SetNull on user delete |
 | CreatedAt | `DateTime` | default UtcNow |
 
-**Table exists** (migration `AddBooking`). **No EF fluent config file**, **no controller**, **service not in DI**.
+**Table exists** (migration `AddBooking`). **`BookingConfiguration` added in code** (indexes on `(EmployeeId, StartTime)`, `(BusinessId, StartTime)`). **Phase 1 EF migration not created/applied yet.** **No controller**; **service not in DI**. Creator assignment not implemented in `BookingService` yet.
 
 ### `Appointment` (older / parallel model — unused by API)
 | Field | Type | Notes |

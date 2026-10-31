@@ -6,6 +6,7 @@ public class Business
     public string Name { get; set; } = default!;
     public string City { get; set; } = default!;
     public string Address { get; set; } = default!;
+    public string TimeZoneId { get; set; } = "Asia/Tehran";
     public string? Description { get; set; }
     public string? ProfileImageUrl { get; set; }
     public string? ProfileImagePublicId { get; set; }

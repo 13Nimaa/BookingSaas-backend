@@ -24,12 +24,26 @@ public class Booking
 
     public BookingStatus Status { get; set; } = BookingStatus.Pending;
 
+    public BookingCreatorType CreatorType { get; set; }
+
+    public string? CreatedByUserId { get; set; }
+    public ApplicationUser? CreatedByUser { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
 public enum BookingStatus
 {
     Pending,
     Confirmed,
     Cancelled,
-    Completed
+    Completed,
+    Expired
+}
+
+public enum BookingCreatorType
+{
+    Customer,
+    Guest,
+    BusinessOwner
 }
