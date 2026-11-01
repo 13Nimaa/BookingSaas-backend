@@ -30,7 +30,7 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 2. **Phase 1 domain foundation migration not applied:** `20261031213454_BookingDomainFoundation` (creator fields, `TimeZoneId`, Restrict FKs, indexes) exists in repo but is **not applied** to local/Docker DB outside Testcontainers.
 3. **Phase 5 exclusion migration not applied:** `20261101201947_BookingActiveOverlapExclusion` (`btree_gist` + active-booking overlap exclude) exists in repo; Testcontainers apply it via `MigrateAsync`. Local/Docker app DBs need explicit `database update`.
 4. **Availability is informational only** — `GET /api/bookings/availability` does not reserve slots; create enforces overlap via DB exclusion (after Phase 5 migration is applied).
-5. **No customer mine / owner-create endpoints** yet (`GET /api/bookings` list + `GET /api/bookings/{id}` detail exist for owner/employee; customer history still missing).
+5. **No owner-create-on-behalf endpoint** yet (`GET /api/bookings/mine` customer history is live; owner/employee list + detail exist).
 6. ~~`IBookingService` DI / `BookingController` / empty `BookingDto` / creator assignment~~ — Done in Phase 3.
 7. ~~Transactional overlap on create~~ — Done in Phase 5 (Postgres EXCLUDE).
 8. ~~Pending auto-expiration BackgroundService~~ — Done in Phase 8.

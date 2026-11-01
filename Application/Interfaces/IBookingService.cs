@@ -27,6 +27,10 @@ public interface IBookingService
         bool isEmployee,
         BookingListQuery query);
 
+    Task<PagedResult<CustomerBookingListItemDto>> ListMineAsync(
+        string userId,
+        BookingMineQuery query);
+
     Task<BookingDetailsDto> GetByIdAsync(
         int bookingId,
         string userId,

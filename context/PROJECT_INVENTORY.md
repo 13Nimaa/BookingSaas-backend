@@ -42,7 +42,7 @@
 | `ITokenService` | `TokenService` | Registered |
 | `ICustomerService` | `CustomerService` | Registered |
 | `IImageUploadService` | `CloudinaryImageUploadService` | Registered |
-| `IBookingService` | `BookingService` | Registered (create, availability, status, list, detail, expire) |
+| `IBookingService` | `BookingService` | Registered (create, availability, status, list, mine, detail, expire) |
 | (hosted) | `PendingBookingExpirationService` | `AddHostedService` — Pending→Expired poller |
 
 ---
@@ -423,6 +423,7 @@ Missing: delete, search, link to user, booking history for customer.
 | Method | Path | Auth | Request | Response |
 |--------|------|------|---------|----------|
 | GET | `/` | `BusinessOwner` or `Employee` | query: `status`, `employeeId`, `customerId`, `serviceId`, `fromDate`, `toDate`, `search`, `page`, `pageSize` | `200` `PagedResult<BookingListItemDto>` |
+| GET | `/mine` | Authorize | query: `status`, `fromDate`, `toDate`, `page`, `pageSize` | `200` `PagedResult<CustomerBookingListItemDto>` |
 | GET | `/{bookingId}` | `BusinessOwner` or `Employee` | — | `200` `BookingDetailsDto` |
 | POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
 | POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
@@ -526,7 +527,26 @@ Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot s
 ```
 `service.name` maps from `Service.Title` (entity has no Description). `employee.profileImageUrl` from `ApplicationUser.ProfileImageUrl`.
 
-Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. Overlap of Pending/Confirmed for the same employee is rejected (`409`, Persian) via Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (half-open `[Start, End)`). Customer mine/history still missing.
+**Customer booking history (`GET /api/bookings/mine`)** — any authenticated user; returns only bookings whose `Customer.UserId` matches the JWT user id (never client-supplied CustomerId/UserId). Supports multiple Customer rows across businesses. Guest customers (`UserId` null) are never included via phone matching. No Customer record → empty `PagedResult`. Owner/employee tokens cannot broaden scope to other customers' history. Filters: `status`, `fromDate`/`toDate` (UTC inclusive on `StartTime`). Defaults: `page=1`, `pageSize=20` (max 100). Sort: `StartTime` desc, then `Id` desc.
+
+**CustomerBookingListItemDto**
+```json
+{
+  "id": 1,
+  "startTime": "...",
+  "endTime": "...",
+  "status": 0,
+  "creatorType": 0,
+  "businessName": "string",
+  "businessId": 1,
+  "serviceName": "string",
+  "serviceDurationMinutes": 30,
+  "employeeName": "string"
+}
+```
+Omits customer name/phone, notes, and Identity fields.
+
+Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. Overlap of Pending/Confirmed for the same employee is rejected (`409`, Persian) via Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (half-open `[Start, End)`).
 
 ---
 
@@ -588,7 +608,7 @@ Password policy: min length 6, non-alphanumeric not required.
 | Pending booking auto-expiration | Done (`PendingBookingExpirationService`) |
 | Booking list (owner/employee) | Done (`GET /api/bookings`) |
 | Booking detail (owner/employee) | Done (`GET /api/bookings/{id}`) |
-| Booking mine (customer history) | Missing |
+| Booking mine (customer history) | Done (`GET /api/bookings/mine`) |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
 | Soft delete / audit | Missing |
@@ -600,9 +620,10 @@ Password policy: min length 6, non-alphanumeric not required.
 ### P0 — Core booking product (biggest gap)
 1. ~~**Register `IBookingService` in DI** and add create `BookingController`.~~ Done (Phase 3).
 2. **Remaining booking endpoints (suggested):**
-   - `GET /api/bookings/mine` — customer’s bookings
+   - ~~`GET /api/bookings/mine` — customer’s bookings~~ Done (Phase 10).
    - ~~Owner/employee list~~ Done (`GET /api/bookings` with filters/pagination).
    - ~~`PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete~~ Done (Phase 6).
+   - Customer self-cancel / reschedule — still missing.
 3. ~~Fill **`BookingDto`** response shape.~~ Done.
 4. ~~**Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).~~ Done.
 5. ~~**Overlap validation** on create~~ — Done (Phase 5 Postgres EXCLUDE; apply migration when ready).

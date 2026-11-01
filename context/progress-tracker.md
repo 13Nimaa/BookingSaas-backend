@@ -1,9 +1,50 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 9 — Booking Details API (`feature-spec/10-booking-detail-endpoint.md`) — **Complete**  
-**Prior:** Phase 8 — Booking Listing, Filtering, Search & Pagination — complete  
+**Current task:** Phase 10 — Customer Booking History API (`feature-spec/11-Customer-Booking-History-API.md`) — **Complete**  
+**Prior:** Phase 9 — Booking Details API — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 10 — Customer Booking History API
+
+Spec: `context/feature-spec/11-Customer-Booking-History-API.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/bookings/mine` | Done |
+| Auth: any authenticated user; scope by `Customer.UserId` from JWT | Done |
+| Multi-business Customer rows supported | Done |
+| Guest bookings excluded (no phone matching) | Done |
+| Filters: status, fromDate, toDate | Done |
+| Pagination via existing `PagedResult<T>` | Done |
+| Sort: `StartTime` desc, `Id` desc | Done |
+| `CustomerBookingListItemDto` (business name; no customer CRM fields) | Done |
+| FluentValidation on `BookingMineQuery` | Done |
+| Integration tests (18) | Done |
+| Schema migration | Not needed |
+| Cancel / reschedule / guest lookup / notifications | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/BookingController.cs` | `GET /api/bookings/mine` |
+| `Infrastructure/Services/BookingService.Cs` | `ListMineAsync` |
+| `Application/Interfaces/IBookingService.cs` | ListMine contract |
+| `Application/Dtos/Booking/BookingMineQuery.cs` | Query params |
+| `Application/Dtos/Booking/CustomerBookingListItemDto.cs` | Customer-facing list row |
+| `Application/Validators/Booking/BookingMineQueryValidator.cs` | FluentValidation |
+| `tests/.../BookingMineTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingMineTests" --verbosity minimal
+```
+
+Result: **18 total — 18 passed**. Docker required.
 
 ---
 
@@ -386,4 +427,4 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 # Next
 
 1. Apply pending booking migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion` — only on request).
-2. Later booking phases: customer self-cancel / mine history — only when specified.
+2. Later booking phases: customer self-cancel / reschedule — only when specified.

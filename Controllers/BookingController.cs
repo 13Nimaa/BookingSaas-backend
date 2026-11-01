@@ -43,6 +43,19 @@ public class BookingController : ControllerBase
         }
     }
 
+    [Authorize]
+    [HttpGet("mine")]
+    public async Task<ActionResult<PagedResult<CustomerBookingListItemDto>>> ListMine(
+        [FromQuery] BookingMineQuery query)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        var result = await _bookingService.ListMineAsync(userId, query);
+        return Ok(result);
+    }
+
     [Authorize(Roles = "BusinessOwner,Employee")]
     [HttpGet("{bookingId:int}")]
     public async Task<ActionResult<BookingDetailsDto>> GetById(int bookingId)

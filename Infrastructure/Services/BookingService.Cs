@@ -238,6 +238,52 @@ public class BookingService : IBookingService
             items, query.Page, query.PageSize, totalCount, totalPages);
     }
 
+    public async Task<PagedResult<CustomerBookingListItemDto>> ListMineAsync(
+        string userId,
+        BookingMineQuery query)
+    {
+        // Ownership is resolved only via Customer.UserId from JWT — never client-supplied ids.
+        // A user may have Customer rows across multiple businesses; guest rows (UserId null) are excluded.
+        IQueryable<Booking> bookings = _context.Bookings
+            .AsNoTracking()
+            .Where(b => b.Customer.UserId == userId);
+
+        if (query.Status is not null)
+            bookings = bookings.Where(b => b.Status == query.Status);
+
+        if (query.FromDate is not null)
+            bookings = bookings.Where(b => b.StartTime >= query.FromDate);
+
+        if (query.ToDate is not null)
+            bookings = bookings.Where(b => b.StartTime <= query.ToDate);
+
+        var totalCount = await bookings.CountAsync();
+        var totalPages = totalCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalCount / (double)query.PageSize);
+
+        var items = await bookings
+            .OrderByDescending(b => b.StartTime)
+            .ThenByDescending(b => b.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(b => new CustomerBookingListItemDto(
+                b.Id,
+                b.StartTime,
+                b.EndTime,
+                b.Status,
+                b.CreatorType,
+                b.Business.Name,
+                b.BusinessId,
+                b.Service.Title,
+                b.Service.DurationMinutes,
+                b.Employee.User.FullName))
+            .ToListAsync();
+
+        return new PagedResult<CustomerBookingListItemDto>(
+            items, query.Page, query.PageSize, totalCount, totalPages);
+    }
+
     public async Task<BookingDetailsDto> GetByIdAsync(
         int bookingId,
         string userId,
