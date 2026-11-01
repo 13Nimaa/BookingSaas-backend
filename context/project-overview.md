@@ -19,7 +19,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 2. User optionally upgrades to BusinessOwner via `POST /api/Business/register`.
 3. Owner manages business, employees, services, employee↔service assignments, working hours, and CRM customers.
 4. Public callers list/browse businesses.
-5. Customers/guests can query free slots via `GET /api/bookings/availability` and create Pending bookings via `POST /api/bookings` and `POST /api/bookings/guest` (availability is informational; create enforces no-overlap for Pending/Confirmed via Postgres exclusion — migration not applied outside tests). Owners can confirm/cancel/complete via `PATCH /api/bookings/{id}/status`.
+5. Customers/guests can query free slots via `GET /api/bookings/availability` and create Pending bookings via `POST /api/bookings` and `POST /api/bookings/guest` (availability is informational; create enforces no-overlap for Pending/Confirmed via Postgres exclusion — migration not applied outside tests). Owners can confirm/cancel/complete via `PATCH /api/bookings/{id}/status`. Pending bookings older than `Booking:PendingExpirationMinutes` (default 30) are auto-expired by a hosted background service.
 
 ## Features
 
@@ -58,7 +58,8 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 - `IBookingService` registered in DI; create sets Pending + creator fields; EndTime from service duration.
 - Availability returns free slots from employee working hours minus Pending/Confirmed bookings.
 - Create overlap prevention via PostgreSQL exclusion constraint (Pending/Confirmed, half-open intervals).
-- Status-transition API is live (`PATCH /api/bookings/{id}/status`). Expiration BackgroundService is a later phase.
+- Status-transition API is live (`PATCH /api/bookings/{id}/status`).
+- Pending auto-expiration via `PendingBookingExpirationService` (atomic Postgres UPDATE).
 - Legacy `Appointment` entity remains unused by API — do not delete or dual-write without an explicit decision.
 
 ## Scope
@@ -74,7 +75,6 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 
 - Payments, notifications, reviews, SaaS billing
 - Admin panel product surface (Admin role exists for a few endpoints only)
-- Booking expiration BackgroundService (later phase)
 - Replacing or removing `Appointment` without an explicit migrate plan
 
 ## Success Criteria

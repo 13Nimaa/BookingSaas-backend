@@ -1,9 +1,47 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 6 — Booking Lifecycle & Status Management (`feature-spec/06-status-management.md`) — **Complete**  
-**Prior:** Phase 5 — Booking Concurrency Protection — complete  
+**Current task:** Phase 8 — Automatic Pending Booking Expiration (`feature-spec/08-pending-auto-exipration.md`) — **Complete**  
+**Prior:** Phase 6 — Booking Lifecycle & Status Management — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 8 — Automatic Pending Booking Expiration
+
+Spec: `context/feature-spec/08-pending-auto-exipration.md`
+
+| Area | Status |
+|------|--------|
+| `PendingBookingExpirationService` (`BackgroundService`) | Done |
+| Atomic `ExecuteUpdateAsync` Pending→Expired by `CreatedAt` | Done |
+| Config: `Booking:PendingExpirationMinutes` (default 30) | Done |
+| Config: `Booking:ExpirationPollingIntervalMinutes` (default 1) | Done |
+| Multi-instance safe (single SQL UPDATE, no distributed lock) | Done |
+| Integration tests (11) | Done |
+| Schema migration | Not needed |
+| Notifications / status APIs / list endpoints | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Infrastructure/Services/PendingBookingExpirationService.cs` | Hosted poller |
+| `Infrastructure/Services/BookingService.Cs` | `ExpirePendingBookingsAsync` |
+| `Application/Interfaces/IBookingService.cs` | Expire contract |
+| `Infrastructure/.../BookingSettings.cs` | Expiration + poll settings |
+| `Program.cs` | `AddHostedService` |
+| `appsettings.json` | Config defaults |
+| `tests/.../BookingPendingExpirationTests.cs` | PostgreSQL coverage |
+| `tests/.../AuthTests.cs` | Disable hosted service in Testcontainers host |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingPendingExpirationTests" --verbosity minimal
+```
+
+Result: **11 total — 11 passed**. Docker required.
 
 ---
 
@@ -273,4 +311,4 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 # Next
 
 1. Apply pending booking migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion` — only on request).
-2. Later booking phases: expiration BackgroundService, list/mine endpoints, customer self-cancel — only when specified.
+2. Later booking phases: list/mine endpoints, customer self-cancel — only when specified.

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BookingSaas_backend.Application.Interfaces;
+using BookingSaas_backend.Infrastructure.Services;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -200,7 +202,9 @@ public sealed class AuthFixture : IAsyncLifetime
                     var existing = services
                         .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) ||
                                     d.ServiceType == typeof(AppDbContext) ||
-                                    d.ServiceType == typeof(IImageUploadService))
+                                    d.ServiceType == typeof(IImageUploadService) ||
+                                    (d.ServiceType == typeof(IHostedService) &&
+                                     d.ImplementationType == typeof(PendingBookingExpirationService)))
                         .ToList();
 
                     foreach (var descriptor in existing)

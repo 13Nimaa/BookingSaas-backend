@@ -22,6 +22,7 @@ public class BookingService : IBookingService
     private readonly AppDbContext _context;
     private readonly ICustomerService _customerService;
     private readonly int _slotIntervalMinutes;
+    private readonly int _pendingExpirationMinutes;
 
     public BookingService(
         AppDbContext context,
@@ -31,6 +32,7 @@ public class BookingService : IBookingService
         _context = context;
         _customerService = customerService;
         _slotIntervalMinutes = Math.Max(1, bookingSettings.Value.SlotIntervalMinutes);
+        _pendingExpirationMinutes = Math.Max(1, bookingSettings.Value.PendingExpirationMinutes);
     }
 
     public async Task<Booking> CreateForUserAsync(
@@ -137,6 +139,17 @@ public class BookingService : IBookingService
         await _context.SaveChangesAsync();
 
         return booking;
+    }
+
+    public Task<int> ExpirePendingBookingsAsync(CancellationToken cancellationToken = default)
+    {
+        var cutoff = DateTime.UtcNow.AddMinutes(-_pendingExpirationMinutes);
+
+        return _context.Bookings
+            .Where(b => b.Status == BookingStatus.Pending && b.CreatedAt <= cutoff)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(b => b.Status, BookingStatus.Expired),
+                cancellationToken);
     }
 
     public async Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(

@@ -84,6 +84,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
+builder.Services.AddHostedService<PendingBookingExpirationService>();
 var app = builder.Build();
 
 // ---------- Middleware pipeline ----------

@@ -33,6 +33,7 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 5. **No list / owner-create endpoints** yet (`PATCH /api/bookings/{id}/status` exists; list/mine still missing).
 6. ~~`IBookingService` DI / `BookingController` / empty `BookingDto` / creator assignment~~ — Done in Phase 3.
 7. ~~Transactional overlap on create~~ — Done in Phase 5 (Postgres EXCLUDE).
+8. ~~Pending auto-expiration BackgroundService~~ — Done in Phase 8.
 
 ## Roles dualism
 

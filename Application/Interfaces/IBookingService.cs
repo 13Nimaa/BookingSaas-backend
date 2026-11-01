@@ -19,4 +19,6 @@ public interface IBookingService
         int bookingId,
         string ownerId,
         UpdateBookingStatusDto dto);
+
+    Task<int> ExpirePendingBookingsAsync(CancellationToken cancellationToken = default);
 }

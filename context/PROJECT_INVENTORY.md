@@ -42,7 +42,8 @@
 | `ITokenService` | `TokenService` | Registered |
 | `ICustomerService` | `CustomerService` | Registered |
 | `IImageUploadService` | `CloudinaryImageUploadService` | Registered |
-| `IBookingService` | `BookingService` | Registered (create for user + guest) |
+| `IBookingService` | `BookingService` | Registered (create, availability, status, expire) |
+| (hosted) | `PendingBookingExpirationService` | `AddHostedService` — Pending→Expired poller |
 
 ---
 
@@ -507,6 +508,9 @@ Rules (create): business/service/employee must exist and share business; employe
 - `Jwt:Issuer` / `Audience` — `BookingSaaS` (**`Jwt:Key` not in file**; expected via User Secrets)
 - `Frontend:Origins` — `["http://localhost:3000"]`
 - `Cloudinary` — CloudName / ApiKey / ApiSecret (empty in repo)
+- `Booking:SlotIntervalMinutes` — default `15`
+- `Booking:PendingExpirationMinutes` — default `30`
+- `Booking:ExpirationPollingIntervalMinutes` — default `1`
 
 Password policy: min length 6, non-alphanumeric not required.
 
@@ -537,6 +541,7 @@ Password policy: min length 6, non-alphanumeric not required.
 | Employee ↔ Service assignment | Done (`EmployeeServicesController`) |
 | Availability / free slots | Done (`GET /api/bookings/availability`) |
 | Booking status transitions (confirm/cancel/complete) | Done (`PATCH /api/bookings/{id}/status`) |
+| Pending booking auto-expiration | Done (`PendingBookingExpirationService`) |
 | Booking list / mine | Missing |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
@@ -644,7 +649,7 @@ Application/
 
 Infrastructure/
   Persistence/AppDbContext + Configurations/*
-  Services/{Token,Customer,Booking,CloudinaryImageUpload}
+  Services/{Token,Customer,Booking,CloudinaryImageUpload,PendingBookingExpiration}
 ```
 
 ---
