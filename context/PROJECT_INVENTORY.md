@@ -42,7 +42,7 @@
 | `ITokenService` | `TokenService` | Registered |
 | `ICustomerService` | `CustomerService` | Registered |
 | `IImageUploadService` | `CloudinaryImageUploadService` | Registered |
-| `IBookingService` | `BookingService` | Registered (create, availability, status, expire) |
+| `IBookingService` | `BookingService` | Registered (create, availability, status, list, detail, expire) |
 | (hosted) | `PendingBookingExpirationService` | `AddHostedService` — Pending→Expired poller |
 
 ---
@@ -422,6 +422,8 @@ Missing: delete, search, link to user, booking history for customer.
 
 | Method | Path | Auth | Request | Response |
 |--------|------|------|---------|----------|
+| GET | `/` | `BusinessOwner` or `Employee` | query: `status`, `employeeId`, `customerId`, `serviceId`, `fromDate`, `toDate`, `search`, `page`, `pageSize` | `200` `PagedResult<BookingListItemDto>` |
+| GET | `/{bookingId}` | `BusinessOwner` or `Employee` | — | `200` `BookingDetailsDto` |
 | POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
 | POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
 | GET | `/availability` | Public | query: `businessId`, `serviceId`, `employeeId`, `date` | `200` `AvailabilitySlotDto[]` |
@@ -482,7 +484,49 @@ Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot s
 ```
 `status`: `0` Pending, `1` Confirmed, `2` Cancelled, `3` Completed, `4` Expired. Allowed transitions only: Pending→Confirmed/Cancelled, Confirmed→Completed/Cancelled. Cancelled/Completed/Expired are terminal; Expired cannot be assigned. Errors: `400` invalid transition/enum, `403` not owner / wrong role, `404` missing booking.
 
-Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. Overlap of Pending/Confirmed for the same employee is rejected (`409`, Persian) via Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (half-open `[Start, End)`). No list/mine yet.
+**Booking list (`GET /api/bookings`)** — owner sees bookings for their owned business; employee sees only rows where `EmployeeId` matches their profile (client `employeeId` cannot broaden that scope). Dates are UTC ISO-8601 against `StartTime` (`fromDate`/`toDate` inclusive). `search` is case-insensitive on customer name/phone. Defaults: `page=1`, `pageSize=20` (max 100). Sort: `StartTime` desc, then `Id` desc.
+
+**BookingListItemDto**
+```json
+{
+  "id": 1,
+  "startTime": "...",
+  "endTime": "...",
+  "status": 0,
+  "creatorType": 0,
+  "customerName": "string",
+  "customerPhone": "string|null",
+  "serviceName": "string",
+  "serviceDurationMinutes": 30,
+  "employeeName": "string",
+  "businessId": 1
+}
+```
+
+**PagedResult** (shared): `items`, `page`, `pageSize`, `totalCount`, `totalPages`, `hasPreviousPage`, `hasNextPage`.
+
+**Booking details (`GET /api/bookings/{bookingId}`)** — owner can read bookings for their owned business; employee can read only bookings assigned to their own `EmployeeId`. Out of scope → `403`; missing → `404` (`رزرو یافت نشد.`). Customer/anonymous rejected. Nested response; no Identity secrets / `createdByUserId`.
+
+**BookingDetailsDto**
+```json
+{
+  "id": 1,
+  "businessId": 1,
+  "startTime": "...",
+  "endTime": "...",
+  "status": 0,
+  "creatorType": 0,
+  "createdAt": "...",
+  "notes": null,
+  "customer": { "id": 1, "name": "string", "phoneNumber": "string|null" },
+  "service": { "id": 1, "name": "string", "durationMinutes": 30, "price": 0 },
+  "employee": { "id": 1, "name": "string", "profileImageUrl": "string|null" },
+  "business": { "id": 1, "name": "string" }
+}
+```
+`service.name` maps from `Service.Title` (entity has no Description). `employee.profileImageUrl` from `ApplicationUser.ProfileImageUrl`.
+
+Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. Overlap of Pending/Confirmed for the same employee is rejected (`409`, Persian) via Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (half-open `[Start, End)`). Customer mine/history still missing.
 
 ---
 
@@ -542,7 +586,9 @@ Password policy: min length 6, non-alphanumeric not required.
 | Availability / free slots | Done (`GET /api/bookings/availability`) |
 | Booking status transitions (confirm/cancel/complete) | Done (`PATCH /api/bookings/{id}/status`) |
 | Pending booking auto-expiration | Done (`PendingBookingExpirationService`) |
-| Booking list / mine | Missing |
+| Booking list (owner/employee) | Done (`GET /api/bookings`) |
+| Booking detail (owner/employee) | Done (`GET /api/bookings/{id}`) |
+| Booking mine (customer history) | Missing |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
 | Soft delete / audit | Missing |
@@ -555,7 +601,7 @@ Password policy: min length 6, non-alphanumeric not required.
 1. ~~**Register `IBookingService` in DI** and add create `BookingController`.~~ Done (Phase 3).
 2. **Remaining booking endpoints (suggested):**
    - `GET /api/bookings/mine` — customer’s bookings
-   - `GET /api/business/{id}/bookings` — owner/employee calendar
+   - ~~Owner/employee list~~ Done (`GET /api/bookings` with filters/pagination).
    - ~~`PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete~~ Done (Phase 6).
 3. ~~Fill **`BookingDto`** response shape.~~ Done.
 4. ~~**Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).~~ Done.
@@ -572,7 +618,7 @@ Password policy: min length 6, non-alphanumeric not required.
 
 ### P2 — Product polish
 13. Business search/filter by city (index already on `City`).
-14. Notes on booking create; booking detail endpoint.
+14. Notes on booking create.
 15. Seed roles (`Customer`, `BusinessOwner`, `Employee`, `Admin`) on startup.
 16. Remove or sync unused `UserRole` enum on `ApplicationUser`.
 17. Fix `CustomerService` naming: uses `user.UserName` as `Name` instead of `FullName`.

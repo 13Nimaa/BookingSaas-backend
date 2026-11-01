@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Dtos.Booking;
 using Domain.Entities;
 
@@ -19,6 +20,18 @@ public interface IBookingService
         int bookingId,
         string ownerId,
         UpdateBookingStatusDto dto);
+
+    Task<PagedResult<BookingListItemDto>> ListAsync(
+        string userId,
+        bool isOwner,
+        bool isEmployee,
+        BookingListQuery query);
+
+    Task<BookingDetailsDto> GetByIdAsync(
+        int bookingId,
+        string userId,
+        bool isOwner,
+        bool isEmployee);
 
     Task<int> ExpirePendingBookingsAsync(CancellationToken cancellationToken = default);
 }

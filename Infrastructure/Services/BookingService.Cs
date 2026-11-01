@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Dtos.Booking;
 using BookingSaas_backend.Application.Interfaces;
 using BookingSaas_backend.Infrastructure.Configuration;
@@ -141,6 +142,170 @@ public class BookingService : IBookingService
         return booking;
     }
 
+    public async Task<PagedResult<BookingListItemDto>> ListAsync(
+        string userId,
+        bool isOwner,
+        bool isEmployee,
+        BookingListQuery query)
+    {
+        IQueryable<Booking> bookings = _context.Bookings.AsNoTracking();
+
+        if (isOwner)
+        {
+            var businessId = await _context.Businesses
+                .AsNoTracking()
+                .Where(b => b.OwnerId == userId)
+                .Select(b => (int?)b.Id)
+                .FirstOrDefaultAsync();
+
+            if (businessId is null)
+                return EmptyPage(query);
+
+            bookings = bookings.Where(b => b.BusinessId == businessId.Value);
+
+            if (query.EmployeeId is not null)
+                bookings = bookings.Where(b => b.EmployeeId == query.EmployeeId);
+        }
+        else if (isEmployee)
+        {
+            var employeeId = await _context.Employees
+                .AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .Select(e => (int?)e.Id)
+                .FirstOrDefaultAsync();
+
+            if (employeeId is null)
+                return EmptyPage(query);
+
+            // Always scope to the caller's employee row; ignore mismatched employeeId.
+            bookings = bookings.Where(b => b.EmployeeId == employeeId.Value);
+        }
+        else
+        {
+            throw new UnauthorizedAccessException();
+        }
+
+        if (query.Status is not null)
+            bookings = bookings.Where(b => b.Status == query.Status);
+
+        if (query.CustomerId is not null)
+            bookings = bookings.Where(b => b.CustomerId == query.CustomerId);
+
+        if (query.ServiceId is not null)
+            bookings = bookings.Where(b => b.ServiceId == query.ServiceId);
+
+        if (query.FromDate is not null)
+            bookings = bookings.Where(b => b.StartTime >= query.FromDate);
+
+        if (query.ToDate is not null)
+            bookings = bookings.Where(b => b.StartTime <= query.ToDate);
+
+        var search = query.Search?.Trim();
+        if (!string.IsNullOrEmpty(search))
+        {
+            var pattern = $"%{search}%";
+            bookings = bookings.Where(b =>
+                EF.Functions.ILike(b.Customer.Name, pattern) ||
+                (b.Customer.PhoneNumber != null &&
+                 EF.Functions.ILike(b.Customer.PhoneNumber, pattern)));
+        }
+
+        var totalCount = await bookings.CountAsync();
+        var totalPages = totalCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalCount / (double)query.PageSize);
+
+        var items = await bookings
+            .OrderByDescending(b => b.StartTime)
+            .ThenByDescending(b => b.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(b => new BookingListItemDto(
+                b.Id,
+                b.StartTime,
+                b.EndTime,
+                b.Status,
+                b.CreatorType,
+                b.Customer.Name,
+                b.Customer.PhoneNumber,
+                b.Service.Title,
+                b.Service.DurationMinutes,
+                b.Employee.User.FullName,
+                b.BusinessId))
+            .ToListAsync();
+
+        return new PagedResult<BookingListItemDto>(
+            items, query.Page, query.PageSize, totalCount, totalPages);
+    }
+
+    public async Task<BookingDetailsDto> GetByIdAsync(
+        int bookingId,
+        string userId,
+        bool isOwner,
+        bool isEmployee)
+    {
+        var booking = await _context.Bookings
+            .AsNoTracking()
+            .Where(b => b.Id == bookingId)
+            .Select(b => new BookingDetailsDto(
+                b.Id,
+                b.BusinessId,
+                b.StartTime,
+                b.EndTime,
+                b.Status,
+                b.CreatorType,
+                b.CreatedAt,
+                b.Notes,
+                new BookingDetailsCustomerDto(
+                    b.Customer.Id,
+                    b.Customer.Name,
+                    b.Customer.PhoneNumber),
+                new BookingDetailsServiceDto(
+                    b.Service.Id,
+                    b.Service.Title,
+                    b.Service.DurationMinutes,
+                    b.Service.Price),
+                new BookingDetailsEmployeeDto(
+                    b.Employee.Id,
+                    b.Employee.User.FullName,
+                    b.Employee.User.ProfileImageUrl),
+                new BookingDetailsBusinessDto(
+                    b.Business.Id,
+                    b.Business.Name)))
+            .FirstOrDefaultAsync();
+
+        if (booking is null)
+            throw new KeyNotFoundException("رزرو یافت نشد.");
+
+        if (isOwner)
+        {
+            var ownsBusiness = await _context.Businesses
+                .AsNoTracking()
+                .AnyAsync(b => b.Id == booking.BusinessId && b.OwnerId == userId);
+
+            if (!ownsBusiness)
+                throw new UnauthorizedAccessException();
+
+            return booking;
+        }
+
+        if (isEmployee)
+        {
+            var employeeId = await _context.Employees
+                .AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .Select(e => (int?)e.Id)
+                .FirstOrDefaultAsync();
+
+            if (employeeId is null || booking.Employee.Id != employeeId.Value)
+                throw new UnauthorizedAccessException();
+
+            return booking;
+        }
+
+        throw new UnauthorizedAccessException();
+    }
+
     public Task<int> ExpirePendingBookingsAsync(CancellationToken cancellationToken = default)
     {
         var cutoff = DateTime.UtcNow.AddMinutes(-_pendingExpirationMinutes);
@@ -151,6 +316,9 @@ public class BookingService : IBookingService
                 setters => setters.SetProperty(b => b.Status, BookingStatus.Expired),
                 cancellationToken);
     }
+
+    private static PagedResult<BookingListItemDto> EmptyPage(BookingListQuery query) =>
+        new([], query.Page, query.PageSize, 0, 0);
 
     public async Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(
         AvailabilityQueryDto query)

@@ -5,4 +5,8 @@ public sealed record PagedResult<T>(
     int Page,
     int PageSize,
     int TotalCount,
-    int TotalPages);
+    int TotalPages)
+{
+    public bool HasPreviousPage => Page > 1 && TotalPages > 0;
+    public bool HasNextPage => Page < TotalPages;
+}

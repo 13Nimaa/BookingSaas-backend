@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.Common;
 using Application.Dtos.Booking;
 using BookingSaas_backend.Application.Interfaces;
 using Domain.Entities;
@@ -16,6 +17,57 @@ public class BookingController : ControllerBase
     public BookingController(IBookingService bookingService)
     {
         _bookingService = bookingService;
+    }
+
+    [Authorize(Roles = "BusinessOwner,Employee")]
+    [HttpGet]
+    public async Task<ActionResult<PagedResult<BookingListItemDto>>> List(
+        [FromQuery] BookingListQuery query)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        try
+        {
+            var result = await _bookingService.ListAsync(
+                userId,
+                User.IsInRole("BusinessOwner"),
+                User.IsInRole("Employee"),
+                query);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    [Authorize(Roles = "BusinessOwner,Employee")]
+    [HttpGet("{bookingId:int}")]
+    public async Task<ActionResult<BookingDetailsDto>> GetById(int bookingId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        try
+        {
+            var result = await _bookingService.GetByIdAsync(
+                bookingId,
+                userId,
+                User.IsInRole("BusinessOwner"),
+                User.IsInRole("Employee"));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 
     [Authorize]

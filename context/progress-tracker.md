@@ -1,9 +1,84 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 8 — Automatic Pending Booking Expiration (`feature-spec/08-pending-auto-exipration.md`) — **Complete**  
-**Prior:** Phase 6 — Booking Lifecycle & Status Management — complete  
+**Current task:** Phase 9 — Booking Details API (`feature-spec/10-booking-detail-endpoint.md`) — **Complete**  
+**Prior:** Phase 8 — Booking Listing, Filtering, Search & Pagination — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 9 — Booking Details API
+
+Spec: `context/feature-spec/10-booking-detail-endpoint.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/bookings/{bookingId}` | Done |
+| Roles: `BusinessOwner`, `Employee` (Customer/anonymous rejected) | Done |
+| Owner scoped to owned business; employee scoped to own `EmployeeId` | Done |
+| `BookingDetailsDto` with nested customer/service/employee/business | Done |
+| AsNoTracking + DTO projection | Done |
+| Integration tests (9) | Done |
+| Schema migration | Not needed |
+| Updates / delete / reschedule / customer history / notifications | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/BookingController.cs` | `GET /api/bookings/{bookingId}` |
+| `Infrastructure/Services/BookingService.Cs` | `GetByIdAsync` |
+| `Application/Interfaces/IBookingService.cs` | GetById contract |
+| `Application/Dtos/Booking/BookingDetailsDto.cs` | Nested details DTO |
+| `tests/.../BookingDetailTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingDetailTests" --verbosity minimal
+```
+
+Result: **9 total — 9 passed**. Docker required.
+
+---
+
+# Phase 8 — Booking Listing, Filtering, Search & Pagination
+
+Spec: `context/feature-spec/09-bookins-api-complete.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/bookings` | Done |
+| Roles: `BusinessOwner`, `Employee` (Customer/anonymous rejected) | Done |
+| Owner scoped to owned business; employee scoped to own `EmployeeId` | Done |
+| Filters: status, employeeId, customerId, serviceId, fromDate, toDate, search | Done |
+| Pagination via existing `PagedResult<T>` (+ `hasPreviousPage` / `hasNextPage`) | Done |
+| Sort: `StartTime` desc, `Id` desc | Done |
+| FluentValidation on query DTO | Done |
+| Integration tests (22) | Done |
+| Schema migration | Not needed |
+| Customer history / create/status/delete/notifications | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/BookingController.cs` | `GET /api/bookings` |
+| `Infrastructure/Services/BookingService.Cs` | `ListAsync` filtered/paged query |
+| `Application/Interfaces/IBookingService.cs` | List contract |
+| `Application/Dtos/Booking/BookingListQuery.cs` | Query params |
+| `Application/Dtos/Booking/BookingListItemDto.cs` | List row DTO |
+| `Application/Validators/Booking/BookingListQueryValidator.cs` | FluentValidation |
+| `Application/Common/PagedResult.cs` | Added hasPrevious/hasNext |
+| `tests/.../BookingListTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingListTests" --verbosity minimal
+```
+
+Result: **22 total — 22 passed**. Docker required.
 
 ---
 
@@ -311,4 +386,4 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 # Next
 
 1. Apply pending booking migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion` — only on request).
-2. Later booking phases: list/mine endpoints, customer self-cancel — only when specified.
+2. Later booking phases: customer self-cancel / mine history — only when specified.
