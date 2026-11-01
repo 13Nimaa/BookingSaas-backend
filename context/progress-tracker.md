@@ -1,9 +1,82 @@
 # Backend progress
 
-**Last updated:** 2026-11-01  
-**Current task:** Phase 4 — Booking Availability API (`feature-spec/05.booking-avalbility.md`) — **Complete**  
-**Prior:** Phase 3 — Booking Creation API — complete  
+**Last updated:** 2026-11-02  
+**Current task:** Phase 6 — Booking Lifecycle & Status Management (`feature-spec/06-status-management.md`) — **Complete**  
+**Prior:** Phase 5 — Booking Concurrency Protection — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 6 — Booking Lifecycle & Status Management
+
+Spec: `context/feature-spec/06-status-management.md`
+
+| Area | Status |
+|------|--------|
+| `PATCH /api/bookings/{bookingId}/status` | Done |
+| Owner-only (`BusinessOwner` + ownership check) | Done |
+| Transitions: Pending→Confirmed/Cancelled; Confirmed→Completed/Cancelled | Done |
+| Terminal: Cancelled / Completed / Expired; Expired not assignable | Done |
+| Enum validation via FluentValidation `IsInEnum` (numeric JSON enums) | Done |
+| Integration tests (14) | Done |
+| Expiration BackgroundService / notifications / customer cancel | Out of scope |
+| Schema migration | Not needed |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/BookingController.cs` | Status PATCH endpoint |
+| `Infrastructure/Services/BookingService.Cs` | Ownership + transition rules |
+| `Application/Interfaces/IBookingService.cs` | `UpdateStatusAsync` |
+| `Application/Dtos/Booking/UpdateBookingStatusDto.cs` | Request DTO |
+| `Application/Validators/Booking/UpdateBookingStatusDtoValidator.cs` | FluentValidation |
+| `tests/.../BookingStatusManagementTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingStatusManagementTests" --verbosity minimal
+```
+
+Result: **14 total — 14 passed**. Docker required.
+
+---
+
+# Phase 5 — Booking Concurrency Protection
+
+Spec: `context/feature-spec/06-bookinh-concurrency.md`
+
+| Area | Status |
+|------|--------|
+| Strategy: PostgreSQL EXCLUDE (gist) on active bookings | Done |
+| `btree_gist` + `EX_Bookings_Employee_Active_Time_Overlap` | Done (migration created, **not applied**) |
+| Half-open `tstzrange(..., '[)')`; Pending+Confirmed only | Done |
+| Create flows wrap customer+booking in a transaction | Done |
+| Exclusion → Persian `409` (`InvalidOperationException`) | Done |
+| Status transition APIs | None exist — DB constraint still guards UPDATEs |
+| Integration tests (10) | Done |
+| Expiration BackgroundService / lifecycle APIs | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Migrations/20261101201947_BookingActiveOverlapExclusion.cs` | `btree_gist` + exclusion constraint |
+| `Infrastructure/Services/BookingService.Cs` | Transaction + exclusion catch on create |
+| `tests/.../BookingConcurrencyTests.cs` | Overlap / adjacent / concurrent coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingConcurrencyTests" --verbosity minimal
+```
+
+Result: **10 total — 10 passed** (includes concurrent overlap + different-employee cases). Docker required.
+
+## Strategy note
+
+EF Core / Npgsql 10 do not model arbitrary `EXCLUDE` constraints; constraint is raw SQL in the migration. Application-only check-then-insert was rejected.
 
 ---
 
@@ -199,5 +272,5 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 
 # Next
 
-1. Apply `BookingDomainFoundation` migration when ready (`dotnet ef database update` — only on request).
-2. Later booking phases: transactional overlap/exclusion on create, expiration BackgroundService, owner approval/status transitions — only when specified.
+1. Apply pending booking migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion` — only on request).
+2. Later booking phases: expiration BackgroundService, list/mine endpoints, customer self-cancel — only when specified.

@@ -5,11 +5,14 @@ using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace BookingSaas_backend.Application.Services;
 
 public class BookingService : IBookingService
 {
+    private const string OccupiedSlotMessage = "این بازه زمانی قبلاً رزرو شده است.";
+
     private static readonly BookingStatus[] OccupyingStatuses =
     [
         BookingStatus.Pending,
@@ -34,57 +37,103 @@ public class BookingService : IBookingService
         string userId,
         CreateBookingDto dto)
     {
-        var service = await ValidateSelectionAsync(
-            dto.BusinessId,
-            dto.ServiceId,
-            dto.EmployeeId,
-            dto.StartTime);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            var service = await ValidateSelectionAsync(
+                dto.BusinessId,
+                dto.ServiceId,
+                dto.EmployeeId,
+                dto.StartTime);
 
-        var customer = await _customerService.GetOrCreateForUserAsync(
-            userId,
-            dto.BusinessId);
+            var customer = await _customerService.GetOrCreateForUserAsync(
+                userId,
+                dto.BusinessId);
 
-        var booking = BuildBooking(
-            dto.BusinessId,
-            customer.Id,
-            dto.ServiceId,
-            dto.EmployeeId,
-            dto.StartTime,
-            service.DurationMinutes,
-            BookingCreatorType.Customer,
-            userId);
+            var booking = BuildBooking(
+                dto.BusinessId,
+                customer.Id,
+                dto.ServiceId,
+                dto.EmployeeId,
+                dto.StartTime,
+                service.DurationMinutes,
+                BookingCreatorType.Customer,
+                userId);
 
-        _context.Bookings.Add(booking);
-        await _context.SaveChangesAsync();
+            _context.Bookings.Add(booking);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-        return booking;
+            return booking;
+        }
+        catch (DbUpdateException ex) when (IsExclusionViolation(ex))
+        {
+            await transaction.RollbackAsync();
+            throw new InvalidOperationException(OccupiedSlotMessage);
+        }
     }
 
     public async Task<Booking> CreateForGuestAsync(
         CreateGuestBookingDto dto)
     {
-        var service = await ValidateSelectionAsync(
-            dto.BusinessId,
-            dto.ServiceId,
-            dto.EmployeeId,
-            dto.StartTime);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            var service = await ValidateSelectionAsync(
+                dto.BusinessId,
+                dto.ServiceId,
+                dto.EmployeeId,
+                dto.StartTime);
 
-        var customer = await _customerService.GetOrCreateForGuestAsync(
-            dto.BusinessId,
-            dto.Name,
-            dto.PhoneNumber);
+            var customer = await _customerService.GetOrCreateForGuestAsync(
+                dto.BusinessId,
+                dto.Name,
+                dto.PhoneNumber);
 
-        var booking = BuildBooking(
-            dto.BusinessId,
-            customer.Id,
-            dto.ServiceId,
-            dto.EmployeeId,
-            dto.StartTime,
-            service.DurationMinutes,
-            BookingCreatorType.Guest,
-            createdByUserId: null);
+            var booking = BuildBooking(
+                dto.BusinessId,
+                customer.Id,
+                dto.ServiceId,
+                dto.EmployeeId,
+                dto.StartTime,
+                service.DurationMinutes,
+                BookingCreatorType.Guest,
+                createdByUserId: null);
 
-        _context.Bookings.Add(booking);
+            _context.Bookings.Add(booking);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return booking;
+        }
+        catch (DbUpdateException ex) when (IsExclusionViolation(ex))
+        {
+            await transaction.RollbackAsync();
+            throw new InvalidOperationException(OccupiedSlotMessage);
+        }
+    }
+
+    public async Task<Booking> UpdateStatusAsync(
+        int bookingId,
+        string ownerId,
+        UpdateBookingStatusDto dto)
+    {
+        var booking = await _context.Bookings
+            .FirstOrDefaultAsync(b => b.Id == bookingId);
+
+        if (booking is null)
+            throw new KeyNotFoundException("رزرو یافت نشد.");
+
+        var ownsBusiness = await _context.Businesses
+            .AnyAsync(b => b.Id == booking.BusinessId && b.OwnerId == ownerId);
+
+        if (!ownsBusiness)
+            throw new UnauthorizedAccessException();
+
+        if (!IsAllowedTransition(booking.Status, dto.Status))
+            throw new ArgumentException("تغییر وضعیت مجاز نیست.");
+
+        booking.Status = dto.Status;
         await _context.SaveChangesAsync();
 
         return booking;
@@ -309,4 +358,17 @@ public class BookingService : IBookingService
         var utcDto = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
         return TimeZoneInfo.ConvertTime(utcDto, timeZone);
     }
+
+    private static bool IsAllowedTransition(BookingStatus from, BookingStatus to) =>
+        (from, to) switch
+        {
+            (BookingStatus.Pending, BookingStatus.Confirmed) => true,
+            (BookingStatus.Pending, BookingStatus.Cancelled) => true,
+            (BookingStatus.Confirmed, BookingStatus.Completed) => true,
+            (BookingStatus.Confirmed, BookingStatus.Cancelled) => true,
+            _ => false
+        };
+
+    private static bool IsExclusionViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation };
 }

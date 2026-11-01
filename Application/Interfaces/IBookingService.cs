@@ -14,4 +14,9 @@ public interface IBookingService
 
     Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(
         AvailabilityQueryDto query);
+
+    Task<Booking> UpdateStatusAsync(
+        int bookingId,
+        string ownerId,
+        UpdateBookingStatusDto dto);
 }

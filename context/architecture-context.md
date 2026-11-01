@@ -69,3 +69,4 @@ Default register role: `Customer`. Business self-register adds `BusinessOwner`.
 6. If a required relationship differs from a spec/audit description, stop and ask — do not guess.
 7. Secrets (`Jwt:Key`, Cloudinary, connection strings beyond local defaults) stay out of committed config where already treated as secrets.
 8. Prefer small, verifiable increments; update `progress-tracker.md` after meaningful work.
+9. For a given employee, Pending/Confirmed bookings must not overlap on half-open `[StartTime, EndTime)`; enforced by Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (not app-only check-then-insert).

@@ -85,6 +85,35 @@ public class BookingController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "BusinessOwner")]
+    [HttpPatch("{bookingId:int}/status")]
+    public async Task<ActionResult<BookingDto>> UpdateStatus(
+        int bookingId,
+        UpdateBookingStatusDto dto)
+    {
+        var ownerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (ownerId is null)
+            return Unauthorized();
+
+        try
+        {
+            var booking = await _bookingService.UpdateStatusAsync(bookingId, ownerId, dto);
+            return Ok(ToDto(booking));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     private static BookingDto ToDto(Booking booking) =>
         new(
             booking.Id,

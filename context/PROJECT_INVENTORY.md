@@ -424,6 +424,7 @@ Missing: delete, search, link to user, booking history for customer.
 | POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
 | POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
 | GET | `/availability` | Public | query: `businessId`, `serviceId`, `employeeId`, `date` | `200` `AvailabilitySlotDto[]` |
+| PATCH | `/{bookingId}/status` | `BusinessOwner` + must own booking's business | `UpdateBookingStatusDto` | `200` `BookingDto` |
 
 **CreateBookingDto** (CustomerId/UserId not accepted; identity from JWT)
 ```json
@@ -474,7 +475,13 @@ Missing: delete, search, link to user, booking history for customer.
 ```
 Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot step from `Booking:SlotIntervalMinutes` (default 15). Uses employee `WorkingHour` rows for the requested local date; occupying statuses = Pending + Confirmed; half-open intervals; past slots omitted. Does **not** reserve a slot.
 
-Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. No list/cancel/confirm/complete yet; no transactional overlap protection on create yet.
+**UpdateBookingStatusDto** (enums are numeric JSON — no `JsonStringEnumConverter`)
+```json
+{ "status": 1 }
+```
+`status`: `0` Pending, `1` Confirmed, `2` Cancelled, `3` Completed, `4` Expired. Allowed transitions only: Pending→Confirmed/Cancelled, Confirmed→Completed/Cancelled. Cancelled/Completed/Expired are terminal; Expired cannot be assigned. Errors: `400` invalid transition/enum, `403` not owner / wrong role, `404` missing booking.
+
+Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. Overlap of Pending/Confirmed for the same employee is rejected (`409`, Persian) via Postgres exclusion constraint `EX_Bookings_Employee_Active_Time_Overlap` (half-open `[Start, End)`). No list/mine yet.
 
 ---
 
@@ -489,6 +496,7 @@ Rules (create): business/service/employee must exist and share business; employe
 | `20261015_AddProfileImageFields` | User + business Cloudinary image fields |
 | `20261031_AddCustomerCrmFields` | Customer CRM email / IsActive / indexes |
 | `20261031_BookingDomainFoundation` | Business.TimeZoneId; Booking creator fields; Restrict FKs + time indexes (**not applied**) |
+| `20261101_BookingActiveOverlapExclusion` | `btree_gist` + partial EXCLUDE on active booking time ranges (**not applied**) |
 
 ---
 
@@ -528,7 +536,8 @@ Password policy: min length 6, non-alphanumeric not required.
 | Appointment entity | Schema only — unused |
 | Employee ↔ Service assignment | Done (`EmployeeServicesController`) |
 | Availability / free slots | Done (`GET /api/bookings/availability`) |
-| Booking lifecycle (confirm/cancel/complete/list) | Missing |
+| Booking status transitions (confirm/cancel/complete) | Done (`PATCH /api/bookings/{id}/status`) |
+| Booking list / mine | Missing |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
 | Soft delete / audit | Missing |
@@ -542,10 +551,10 @@ Password policy: min length 6, non-alphanumeric not required.
 2. **Remaining booking endpoints (suggested):**
    - `GET /api/bookings/mine` — customer’s bookings
    - `GET /api/business/{id}/bookings` — owner/employee calendar
-   - `PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete
+   - ~~`PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete~~ Done (Phase 6).
 3. ~~Fill **`BookingDto`** response shape.~~ Done.
 4. ~~**Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).~~ Done.
-5. **Overlap validation** on create (use index pattern already on Appointments, or add same for Bookings).
+5. ~~**Overlap validation** on create~~ — Done (Phase 5 Postgres EXCLUDE; apply migration when ready).
 6. **Decide: `Booking` vs `Appointment`** — pick one; migrate/remove the other to avoid dual sources of truth.
 
 ### P1 — Make owner dashboard usable

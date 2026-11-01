@@ -28,9 +28,11 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 
 1. **Dual models:** `Booking` (canonical going forward) vs unused `Appointment` — do not delete Appointment without an explicit migrate plan.
 2. **Phase 1 domain foundation migration not applied:** `20261031213454_BookingDomainFoundation` (creator fields, `TimeZoneId`, Restrict FKs, indexes) exists in repo but is **not applied** to local/Docker DB outside Testcontainers.
-3. **Availability is informational only** — `GET /api/bookings/availability` does not reserve slots; create API still accepts Pending bookings without working-hours or concurrency checks (overlap protection is a later phase).
-4. **No list / status-transition / owner-create endpoints** yet.
-5. ~~`IBookingService` DI / `BookingController` / empty `BookingDto` / creator assignment~~ — Done in Phase 3.
+3. **Phase 5 exclusion migration not applied:** `20261101201947_BookingActiveOverlapExclusion` (`btree_gist` + active-booking overlap exclude) exists in repo; Testcontainers apply it via `MigrateAsync`. Local/Docker app DBs need explicit `database update`.
+4. **Availability is informational only** — `GET /api/bookings/availability` does not reserve slots; create enforces overlap via DB exclusion (after Phase 5 migration is applied).
+5. **No list / owner-create endpoints** yet (`PATCH /api/bookings/{id}/status` exists; list/mine still missing).
+6. ~~`IBookingService` DI / `BookingController` / empty `BookingDto` / creator assignment~~ — Done in Phase 3.
+7. ~~Transactional overlap on create~~ — Done in Phase 5 (Postgres EXCLUDE).
 
 ## Roles dualism
 
