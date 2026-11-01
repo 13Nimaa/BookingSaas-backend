@@ -60,6 +60,31 @@ public class BookingController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Returns bookable slots for the given business/service/employee/date.
+    /// Slot timestamps are ISO 8601 DateTimeOffset values in the business timezone offset.
+    /// Availability is informational and does not reserve a slot.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("availability")]
+    public async Task<ActionResult<IReadOnlyList<AvailabilitySlotDto>>> GetAvailability(
+        [FromQuery] AvailabilityQueryDto query)
+    {
+        try
+        {
+            var slots = await _bookingService.GetAvailabilityAsync(query);
+            return Ok(slots);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
     private static BookingDto ToDto(Booking booking) =>
         new(
             booking.Id,

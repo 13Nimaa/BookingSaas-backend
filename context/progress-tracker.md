@@ -1,9 +1,58 @@
 # Backend progress
 
 **Last updated:** 2026-11-01  
-**Current task:** Phase 3 — Booking Creation API (`feature-spec/04-booking=creation-API.md`) — **Complete**  
-**Prior:** Phase 2 — Employee-Service Management API — complete  
+**Current task:** Phase 4 — Booking Availability API (`feature-spec/05.booking-avalbility.md`) — **Complete**  
+**Prior:** Phase 3 — Booking Creation API — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 4 — Booking Availability API
+
+Spec: `context/feature-spec/05.booking-avalbility.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/bookings/availability` | Done |
+| Query: businessId, serviceId, employeeId, date | Done |
+| Response `AvailabilitySlotDto` (DateTimeOffset ISO with business offset) | Done |
+| Working hours = employee + date-specific intervals | Done |
+| Occupancy: Pending + Confirmed; Cancelled/Expired/Completed free | Done |
+| Half-open `[start, end)` overlap | Done |
+| Past slots excluded | Done |
+| Slot interval via `Booking:SlotIntervalMinutes` (default 15) | Done |
+| Timezone via `Business.TimeZoneId` (no hardcoded Tehran in calc) | Done |
+| Integration tests (12) | Done |
+| Overlap protection / expiration / status APIs | Out of scope |
+| Schema migration | Not needed |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Controllers/BookingController.cs` | Availability endpoint |
+| `Infrastructure/Services/BookingService.Cs` | Slot generation |
+| `Application/Interfaces/IBookingService.cs` | `GetAvailabilityAsync` |
+| `Application/Dtos/Booking/AvailabilityQueryDto.cs` | Query DTO |
+| `Application/Dtos/Booking/AvailabilitySlotDto.cs` | Response DTO |
+| `Application/Validators/Booking/AvailabilityQueryDtoValidator.cs` | FluentValidation |
+| `Infrastructure/.../BookingSettings.cs` | Slot interval config |
+| `appsettings.json` / `Program.cs` | Config + DI |
+| `tests/.../BookingAvailabilityTests.cs` | Integration coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingAvailabilityTests" --verbosity minimal
+```
+
+Result: **12 total — 12 passed**. Docker required.
+
+## WorkingHour limitations (unchanged model)
+
+- Employee-specific only (no business-wide hours).
+- Date-specific rows only (no weekly recurring template).
+- Multiple intervals per date allowed; no dedicated break entity (gaps between intervals act as breaks).
 
 ---
 
@@ -151,4 +200,4 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 # Next
 
 1. Apply `BookingDomainFoundation` migration when ready (`dotnet ef database update` — only on request).
-2. Later booking phases: availability, overlap/exclusion, expiration BackgroundService, owner approval/status transitions — only when specified.
+2. Later booking phases: transactional overlap/exclusion on create, expiration BackgroundService, owner approval/status transitions — only when specified.

@@ -1,22 +1,33 @@
 using Application.Dtos.Booking;
 using BookingSaas_backend.Application.Interfaces;
+using BookingSaas_backend.Infrastructure.Configuration;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace BookingSaas_backend.Application.Services;
 
 public class BookingService : IBookingService
 {
+    private static readonly BookingStatus[] OccupyingStatuses =
+    [
+        BookingStatus.Pending,
+        BookingStatus.Confirmed
+    ];
+
     private readonly AppDbContext _context;
     private readonly ICustomerService _customerService;
+    private readonly int _slotIntervalMinutes;
 
     public BookingService(
         AppDbContext context,
-        ICustomerService customerService)
+        ICustomerService customerService,
+        IOptions<BookingSettings> bookingSettings)
     {
         _context = context;
         _customerService = customerService;
+        _slotIntervalMinutes = Math.Max(1, bookingSettings.Value.SlotIntervalMinutes);
     }
 
     public async Task<Booking> CreateForUserAsync(
@@ -77,6 +88,118 @@ public class BookingService : IBookingService
         await _context.SaveChangesAsync();
 
         return booking;
+    }
+
+    public async Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(
+        AvailabilityQueryDto query)
+    {
+        var (business, service, employee) = await ValidateAvailabilitySelectionAsync(
+            query.BusinessId,
+            query.ServiceId,
+            query.EmployeeId);
+
+        if (!TryResolveTimeZone(business.TimeZoneId, out var timeZone))
+            throw new InvalidOperationException("منطقه زمانی کسب‌وکار معتبر نیست.");
+
+        var workingHours = await _context.WorkingHours
+            .AsNoTracking()
+            .Where(w => w.EmployeeId == employee.Id && w.Date == query.Date)
+            .OrderBy(w => w.StartTime)
+            .ToListAsync();
+
+        if (workingHours.Count == 0)
+            throw new InvalidOperationException("ساعت کاری برای این تاریخ تعریف نشده است.");
+
+        if (!TryLocalToUtc(query.Date, TimeOnly.MinValue, timeZone, out var dayStartUtc)
+            || !TryLocalToUtc(query.Date.AddDays(1), TimeOnly.MinValue, timeZone, out var dayEndUtc))
+        {
+            throw new InvalidOperationException("تبدیل تاریخ به منطقه زمانی کسب‌وکار ممکن نیست.");
+        }
+
+        var bookings = await _context.Bookings
+            .AsNoTracking()
+            .Where(b =>
+                b.EmployeeId == employee.Id &&
+                OccupyingStatuses.Contains(b.Status) &&
+                b.StartTime < dayEndUtc &&
+                b.EndTime > dayStartUtc)
+            .Select(b => new { b.StartTime, b.EndTime })
+            .ToListAsync();
+
+        var utcNow = DateTime.UtcNow;
+        var duration = TimeSpan.FromMinutes(service.DurationMinutes);
+        var step = TimeSpan.FromMinutes(_slotIntervalMinutes);
+        var slots = new List<AvailabilitySlotDto>();
+
+        foreach (var interval in workingHours)
+        {
+            if (!TryLocalToUtc(query.Date, interval.StartTime, timeZone, out var intervalStartUtc)
+                || !TryLocalToUtc(query.Date, interval.EndTime, timeZone, out var intervalEndUtc))
+            {
+                continue;
+            }
+
+            for (var slotStartUtc = intervalStartUtc;
+                 slotStartUtc + duration <= intervalEndUtc;
+                 slotStartUtc += step)
+            {
+                var slotEndUtc = slotStartUtc + duration;
+
+                if (slotStartUtc < utcNow)
+                    continue;
+
+                var overlaps = bookings.Any(b =>
+                    slotStartUtc < b.EndTime && b.StartTime < slotEndUtc);
+
+                if (overlaps)
+                    continue;
+
+                slots.Add(new AvailabilitySlotDto(
+                    ToBusinessOffset(slotStartUtc, timeZone),
+                    ToBusinessOffset(slotEndUtc, timeZone)));
+            }
+        }
+
+        return slots;
+    }
+
+    private async Task<(Business Business, Service Service, Employee Employee)> ValidateAvailabilitySelectionAsync(
+        int businessId,
+        int serviceId,
+        int employeeId)
+    {
+        var business = await _context.Businesses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == businessId);
+
+        if (business is null)
+            throw new KeyNotFoundException("کسب‌وکار یافت نشد.");
+
+        var service = await _context.Services
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == serviceId);
+
+        if (service is null)
+            throw new KeyNotFoundException("خدمت یافت نشد.");
+
+        if (service.BusinessId != businessId)
+            throw new InvalidOperationException("این خدمت متعلق به کسب‌وکار دیگری است.");
+
+        var employee = await _context.Employees
+            .AsNoTracking()
+            .Include(e => e.Services)
+            .FirstOrDefaultAsync(e => e.Id == employeeId);
+
+        if (employee is null)
+            throw new KeyNotFoundException("کارمند یافت نشد.");
+
+        if (employee.BusinessId != businessId)
+            throw new InvalidOperationException("این کارمند متعلق به کسب‌وکار دیگری است.");
+
+        if (employee.Services.All(s => s.Id != serviceId))
+            throw new InvalidOperationException("این کارمند به خدمت انتخاب‌شده تخصیص داده نشده است.");
+
+        return (business, service, employee);
     }
 
     private async Task<Service> ValidateSelectionAsync(
@@ -141,4 +264,49 @@ public class BookingService : IBookingService
             CreatedByUserId = createdByUserId,
             CreatedAt = DateTime.UtcNow
         };
+
+    private static bool TryResolveTimeZone(string timeZoneId, out TimeZoneInfo timeZone)
+    {
+        try
+        {
+            timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            return true;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            timeZone = null!;
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            timeZone = null!;
+            return false;
+        }
+    }
+
+    private static bool TryLocalToUtc(
+        DateOnly date,
+        TimeOnly time,
+        TimeZoneInfo timeZone,
+        out DateTime utc)
+    {
+        try
+        {
+            var local = DateTime.SpecifyKind(date.ToDateTime(time), DateTimeKind.Unspecified);
+            utc = TimeZoneInfo.ConvertTimeToUtc(local, timeZone);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            // Invalid local time during DST spring-forward gap.
+            utc = default;
+            return false;
+        }
+    }
+
+    private static DateTimeOffset ToBusinessOffset(DateTime utc, TimeZoneInfo timeZone)
+    {
+        var utcDto = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+        return TimeZoneInfo.ConvertTime(utcDto, timeZone);
+    }
 }

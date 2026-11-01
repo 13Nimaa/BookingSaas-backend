@@ -18,6 +18,8 @@ using BookingSaas_backend.Infrastructure.Services;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<CloudinarySettings>(
     builder.Configuration.GetSection("Cloudinary"));
+builder.Services.Configure<BookingSettings>(
+    builder.Configuration.GetSection(BookingSettings.SectionName));
 // ---------- DbContext (Postgres) ----------
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));

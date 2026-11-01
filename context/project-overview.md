@@ -19,7 +19,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 2. User optionally upgrades to BusinessOwner via `POST /api/Business/register`.
 3. Owner manages business, employees, services, employee↔service assignments, working hours, and CRM customers.
 4. Public callers list/browse businesses.
-5. Customers/guests can create Pending bookings via `POST /api/bookings` and `POST /api/bookings/guest` (no availability/overlap yet). Domain foundation migration exists (not applied outside tests).
+5. Customers/guests can query free slots via `GET /api/bookings/availability` and create Pending bookings via `POST /api/bookings` and `POST /api/bookings/guest` (availability is informational; no transactional overlap yet). Domain foundation migration exists (not applied outside tests).
 
 ## Features
 
@@ -54,9 +54,10 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 
 ### Bookings
 
-- `Booking` entity + `BookingService` + `BookingController` create endpoints (authenticated + guest).
+- `Booking` entity + `BookingService` + `BookingController` create + availability endpoints.
 - `IBookingService` registered in DI; create sets Pending + creator fields; EndTime from service duration.
-- Availability, overlap prevention, expiration, and status transitions are later phases.
+- Availability returns free slots from employee working hours minus Pending/Confirmed bookings.
+- Overlap prevention on create, expiration, and status transitions are later phases.
 - Legacy `Appointment` entity remains unused by API — do not delete or dual-write without an explicit decision.
 
 ## Scope
@@ -72,7 +73,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 
 - Payments, notifications, reviews, SaaS billing
 - Admin panel product surface (Admin role exists for a few endpoints only)
-- Availability engine / booking expiration BackgroundService (later phases)
+- Booking expiration BackgroundService / transactional overlap on create (later phases)
 - Replacing or removing `Appointment` without an explicit migrate plan
 
 ## Success Criteria

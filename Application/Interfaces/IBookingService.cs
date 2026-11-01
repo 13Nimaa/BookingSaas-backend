@@ -11,4 +11,7 @@ public interface IBookingService
 
     Task<Booking> CreateForGuestAsync(
         CreateGuestBookingDto dto);
+
+    Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(
+        AvailabilityQueryDto query);
 }

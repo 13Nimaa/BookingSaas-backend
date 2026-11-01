@@ -423,6 +423,7 @@ Missing: delete, search, link to user, booking history for customer.
 |--------|------|------|---------|----------|
 | POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
 | POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
+| GET | `/availability` | Public | query: `businessId`, `serviceId`, `employeeId`, `date` | `200` `AvailabilitySlotDto[]` |
 
 **CreateBookingDto** (CustomerId/UserId not accepted; identity from JWT)
 ```json
@@ -467,7 +468,13 @@ Missing: delete, search, link to user, booking history for customer.
 }
 ```
 
-Rules: business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. No list/cancel/confirm/complete/availability yet.
+**AvailabilitySlotDto**
+```json
+{ "startTime": "2026-11-15T09:00:00+03:30", "endTime": "2026-11-15T09:30:00+03:30" }
+```
+Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot step from `Booking:SlotIntervalMinutes` (default 15). Uses employee `WorkingHour` rows for the requested local date; occupying statuses = Pending + Confirmed; half-open intervals; past slots omitted. Does **not** reserve a slot.
+
+Rules (create): business/service/employee must exist and share business; employee must be assigned to service; new bookings are `Pending`; authenticated create → `CreatorType=Customer` + `CreatedByUserId`; guest → `CreatorType=Guest` + null user; guest phone matching a registered customer does **not** reuse that customer row. No list/cancel/confirm/complete yet; no transactional overlap protection on create yet.
 
 ---
 
@@ -520,7 +527,7 @@ Password policy: min length 6, non-alphanumeric not required.
 | Booking create (user + guest) | Done (`POST /api/bookings`, `/guest`) |
 | Appointment entity | Schema only — unused |
 | Employee ↔ Service assignment | Done (`EmployeeServicesController`) |
-| Availability / free slots | Missing |
+| Availability / free slots | Done (`GET /api/bookings/availability`) |
 | Booking lifecycle (confirm/cancel/complete/list) | Missing |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
@@ -537,7 +544,7 @@ Password policy: min length 6, non-alphanumeric not required.
    - `GET /api/business/{id}/bookings` — owner/employee calendar
    - `PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete
 3. ~~Fill **`BookingDto`** response shape.~~ Done.
-4. **Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).
+4. ~~**Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).~~ Done.
 5. **Overlap validation** on create (use index pattern already on Appointments, or add same for Bookings).
 6. **Decide: `Booking` vs `Appointment`** — pick one; migrate/remove the other to avoid dual sources of truth.
 
