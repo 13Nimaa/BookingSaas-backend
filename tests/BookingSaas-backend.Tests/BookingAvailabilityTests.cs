@@ -123,6 +123,18 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Does_not_exclude_time_occupied_only_by_completed_bookings()
+    {
+        var date = FutureLocalDate(daysAhead: 25);
+        var setup = await CreateAvailabilitySetupAsync("09126000014", date, "09:00:00", "11:00:00");
+        await SeedBookingAsync(setup, date, new TimeOnly(9, 0), BookingStatus.Completed);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.Contains(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9));
+    }
+
+    [Fact]
     public async Task Uses_service_duration_correctly()
     {
         var date = FutureLocalDate(daysAhead: 20);
@@ -139,6 +151,133 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
         Assert.All(slots, s => Assert.Equal(TimeSpan.FromMinutes(45), s.EndTime - s.StartTime));
         Assert.Equal(TimeSpan.FromHours(9), slots[0].StartTime.TimeOfDay);
         Assert.DoesNotContain(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9.5));
+    }
+
+    [Fact]
+    public async Task Uses_default_service_duration_when_employee_has_no_override()
+    {
+        var date = FutureLocalDate(daysAhead: 26);
+        var setup = await CreateAvailabilitySetupAsync(
+            "09126000015",
+            date,
+            "09:00:00",
+            "11:00:00",
+            durationMinutes: 30);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.NotEmpty(slots);
+        Assert.All(slots, s => Assert.Equal(TimeSpan.FromMinutes(30), s.EndTime - s.StartTime));
+        Assert.Contains(slots, s =>
+            s.StartTime.TimeOfDay == TimeSpan.FromHours(9) &&
+            s.EndTime.TimeOfDay == TimeSpan.FromHours(9.5));
+    }
+
+    [Fact]
+    public async Task Uses_employee_duration_override_instead_of_service_default()
+    {
+        var date = FutureLocalDate(daysAhead: 27);
+        var setup = await CreateAvailabilitySetupAsync(
+            "09126000016",
+            date,
+            "09:00:00",
+            "12:00:00",
+            durationMinutes: 30,
+            durationMinutesOverride: 45);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.NotEmpty(slots);
+        Assert.All(slots, s => Assert.Equal(TimeSpan.FromMinutes(45), s.EndTime - s.StartTime));
+        Assert.Contains(slots, s =>
+            s.StartTime.TimeOfDay == TimeSpan.FromHours(9) &&
+            s.EndTime.TimeOfDay == TimeSpan.FromHours(9.75));
+        Assert.DoesNotContain(slots, s =>
+            s.StartTime.TimeOfDay == TimeSpan.FromHours(9) &&
+            s.EndTime.TimeOfDay == TimeSpan.FromHours(9.5));
+    }
+
+    [Fact]
+    public async Task Duration_override_applies_when_price_override_is_null()
+    {
+        var date = FutureLocalDate(daysAhead: 28);
+        var setup = await CreateAvailabilitySetupAsync(
+            "09126000017",
+            date,
+            "09:00:00",
+            "11:00:00",
+            durationMinutes: 30,
+            durationMinutesOverride: 45,
+            priceOverride: null);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.NotEmpty(slots);
+        Assert.All(slots, s => Assert.Equal(TimeSpan.FromMinutes(45), s.EndTime - s.StartTime));
+
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var assignment = await db.EmployeeServices.AsNoTracking().SingleAsync(es =>
+            es.EmployeesId == setup.EmployeeId &&
+            es.ServicesId == setup.ServiceId);
+        Assert.Null(assignment.PriceOverride);
+        Assert.Equal(45, assignment.DurationMinutesOverride);
+    }
+
+    [Fact]
+    public async Task Does_not_return_slots_that_exceed_working_hours_with_duration_override()
+    {
+        var date = FutureLocalDate(daysAhead: 29);
+        var setup = await CreateAvailabilitySetupAsync(
+            "09126000018",
+            date,
+            "09:00:00",
+            "10:00:00",
+            durationMinutes: 30,
+            durationMinutesOverride: 45);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.NotEmpty(slots);
+        Assert.All(slots, s =>
+        {
+            Assert.Equal(TimeSpan.FromMinutes(45), s.EndTime - s.StartTime);
+            Assert.True(s.EndTime.TimeOfDay <= TimeSpan.FromHours(10));
+        });
+        Assert.Contains(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9));
+        Assert.Contains(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9.25));
+        Assert.DoesNotContain(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9.5));
+    }
+
+    [Fact]
+    public async Task Existing_bookings_block_slots_using_stored_start_and_end_times()
+    {
+        var date = FutureLocalDate(daysAhead: 30);
+        var setup = await CreateAvailabilitySetupAsync(
+            "09126000019",
+            date,
+            "09:00:00",
+            "12:00:00",
+            durationMinutes: 30,
+            durationMinutesOverride: 45);
+
+        // Stored booking uses historical EndTime (30 min), not the current 45-min override.
+        await SeedBookingAsync(
+            setup,
+            date,
+            new TimeOnly(9, 0),
+            BookingStatus.Confirmed,
+            storedDurationMinutes: 30);
+
+        var slots = await GetAvailabilityAsync(setup, date);
+
+        Assert.DoesNotContain(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9));
+        // A 45-minute candidate starting 09:15 overlaps stored [09:00, 09:30).
+        Assert.DoesNotContain(slots, s => s.StartTime.TimeOfDay == TimeSpan.FromHours(9.25));
+        // A 45-minute candidate starting 09:30 starts at the stored end and is free.
+        Assert.Contains(slots, s =>
+            s.StartTime.TimeOfDay == TimeSpan.FromHours(9.5) &&
+            s.EndTime.TimeOfDay == TimeSpan.FromHours(10.25));
     }
 
     [Fact]
@@ -238,7 +377,9 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
         DateOnly date,
         string startTime,
         string endTime,
-        int durationMinutes = 30)
+        int durationMinutes = 30,
+        int? durationMinutesOverride = null,
+        decimal? priceOverride = null)
     {
         var owner = await CreateOwnerWithBusinessAsync(ownerPhone, $"Avail {ownerPhone}");
         var employeePhone = ownerPhone.Replace("09126", "09127", StringComparison.Ordinal);
@@ -249,11 +390,20 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
             "Avail Service",
             durationMinutes);
 
+        object assignBody = durationMinutesOverride is null && priceOverride is null
+            ? new { serviceId = service.Id }
+            : new
+            {
+                serviceId = service.Id,
+                priceOverride,
+                durationMinutesOverride
+            };
+
         var assign = await SendAuthorizedAsync(
             HttpMethod.Post,
             $"/api/employees/{employee.Id}/services",
             owner.AccessToken,
-            new { serviceId = service.Id });
+            assignBody);
         assign.EnsureSuccessStatusCode();
 
         var hours = await SendAuthorizedAsync(
@@ -273,19 +423,21 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
             owner.BusinessId,
             employee.Id,
             service.Id,
-            durationMinutes);
+            durationMinutesOverride ?? durationMinutes);
     }
 
     private async Task SeedBookingAsync(
         SetupContext setup,
         DateOnly date,
         TimeOnly localStart,
-        BookingStatus status)
+        BookingStatus status,
+        int? storedDurationMinutes = null)
     {
         var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran");
         var startUtc = TimeZoneInfo.ConvertTimeToUtc(
             DateTime.SpecifyKind(date.ToDateTime(localStart), DateTimeKind.Unspecified),
             tz);
+        var durationMinutes = storedDurationMinutes ?? setup.DurationMinutes;
 
         await using var scope = _fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -294,7 +446,7 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
         {
             BusinessId = setup.BusinessId,
             Name = $"Seed {status}",
-            PhoneNumber = $"09128{setup.EmployeeId:D5}"
+            PhoneNumber = $"09128{setup.EmployeeId:D5}{Random.Shared.Next(10, 99)}"
         };
         db.Customers.Add(customer);
         await db.SaveChangesAsync();
@@ -306,7 +458,7 @@ public sealed class BookingAvailabilityTests : IAsyncLifetime
             ServiceId = setup.ServiceId,
             EmployeeId = setup.EmployeeId,
             StartTime = startUtc,
-            EndTime = startUtc.AddMinutes(setup.DurationMinutes),
+            EndTime = startUtc.AddMinutes(durationMinutes),
             Status = status,
             CreatorType = BookingCreatorType.Guest,
             CreatedAt = DateTime.UtcNow

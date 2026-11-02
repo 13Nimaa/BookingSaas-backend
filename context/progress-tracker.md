@@ -1,9 +1,81 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 1 — Upgrade EmployeeService Domain Model (`feature specs/13-Upgrade EmployeeService Domain Model.md`) — **Complete**  
-**Prior:** Phase 11 — Booking MVP Integration & Production Readiness — complete (verification)  
+**Current task:** Phase 3 — Availability Integration with Employee-Specific Service Duration (`feature spec/15- Availability Integration with Employee-Specific Service Duration.md`) — **Complete**  
+**Prior:** Phase 2 — Employee-Service API Upgrade — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 3 — Availability Integration with Employee-Specific Duration
+
+Spec: `context/feature spec/15- Availability Integration with Employee-Specific Service Duration.md`
+
+| Area | Status |
+|------|--------|
+| Resolve `EffectiveDurationMinutes` from `EmployeeService` | Done |
+| Availability slot generation uses effective duration | Done |
+| Working-hours fit / overlap checks use effective duration | Done |
+| Null override → `Service.DurationMinutes` | Done |
+| Assignment required (not entity existence alone) | Done |
+| Pending/Confirmed block; Cancelled/Completed/Expired free | Unchanged |
+| Historical booking EndTime used as stored | Unchanged |
+| Slot interval config unchanged | Done |
+| Booking create / price / schema | Out of scope |
+| Migration | Not in this phase |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Infrastructure/Services/BookingService.Cs` | Availability duration from EmployeeService |
+| `tests/.../BookingAvailabilityTests.cs` | Override + conflict coverage |
+| `context/feature spec/15-…md` | Spec saved |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingAvailabilityTests" --verbosity minimal
+```
+
+Result: **18 total — 18 passed**. Docker required.
+
+---
+
+# Phase 2 — Employee-Service API Upgrade
+
+Spec: `context/feature spec/14- Employee-Service API Upgrade.md`
+
+| Area | Status |
+|------|--------|
+| GET returns default / override / effective values | Done |
+| POST accepts optional `priceOverride` / `durationMinutesOverride` | Done |
+| POST `{ serviceId }` only remains compatible | Done |
+| PUT update + explicit-null reset (omit vs null) | Done |
+| FluentValidation (price ≥ 0, precision 10,2; duration > 0) | Done |
+| Ownership / duplicate / 404 rules preserved | Done |
+| Schema migration | Not in this phase |
+| Availability / booking resolution | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Application/Dtos/Employee/EmployeeServiceDto.cs` | Response shape |
+| `Application/Dtos/Employee/AssignServiceDto.cs` | Optional overrides on assign |
+| `Application/Dtos/Employee/UpdateEmployeeServiceDto.cs` | Omit-vs-null PUT body |
+| `Application/Validators/Employee/AssignServiceDtoValidator.cs` | Assign validation |
+| `Application/Validators/Employee/UpdateEmployeeServiceDtoValidator.cs` | PUT validation |
+| `Controllers/EmployeeServicesController.cs` | GET/POST/PUT/DELETE |
+| `tests/.../EmployeeServicesTests.cs` | API coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~EmployeeServicesTests" --verbosity minimal
+```
+
+Result: **22 total — 22 passed**. Docker required.
 
 ---
 
@@ -513,5 +585,5 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 # Next
 
 1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides` — only on request).
-2. Subsequent EmployeeService phases: PUT overrides endpoint, then availability/booking resolution of effective price/duration.
+2. Phase 4 — Booking Integration: create bookings using effective duration (and later price snapshot).
 3. Later booking phases: customer self-cancel / reschedule — only when specified.

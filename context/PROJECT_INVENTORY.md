@@ -350,16 +350,40 @@ All: **`BusinessOwner`** + must own the employee's business (derived from DB; cl
 
 | Method | Path | Request | Response |
 |--------|------|---------|----------|
-| GET | `/` | — | `ServiceDto[]` |
-| POST | `/` | `AssignServiceDto` | `201` `ServiceDto` |
+| GET | `/` | — | `EmployeeServiceDto[]` |
+| POST | `/` | `AssignServiceDto` | `201` `EmployeeServiceDto` |
+| PUT | `/{serviceId}` | `UpdateEmployeeServiceDto` | `200` `EmployeeServiceDto` |
 | DELETE | `/{serviceId}` | — | `{ message }` (Persian) |
 
 **AssignServiceDto**
 ```json
-{ "serviceId": 1 }
+{ "serviceId": 1, "priceOverride": null, "durationMinutesOverride": null }
 ```
+`priceOverride` / `durationMinutesOverride` optional; omit or null → inherit Service defaults. `{ "serviceId": 1 }` alone still works.
 
-Rules: employee and service must share the same business; duplicates → `409`; remove blocked if any `Booking` exists for that employee+service pair → `409`; missing assignment → `404`. Join entity `EmployeeService` / table `EmployeeServices` has composite PK `(EmployeesId, ServicesId)` plus optional `PriceOverride` / `DurationMinutesOverride` (null = inherit Service defaults). PUT override endpoint not implemented yet.
+**UpdateEmployeeServiceDto**
+```json
+{ "priceOverride": 300000, "durationMinutesOverride": 45 }
+```
+Omitted property = leave unchanged; explicit `null` = reset that override to inherit Service default.
+
+**EmployeeServiceDto**
+```json
+{
+  "id": 1,
+  "title": "string",
+  "defaultPrice": 100000,
+  "defaultDurationMinutes": 30,
+  "priceOverride": null,
+  "durationMinutesOverride": null,
+  "effectivePrice": 100000,
+  "effectiveDurationMinutes": 30,
+  "businessId": 1
+}
+```
+`effective*` = override ?? Service default. Validation: price ≥ 0 with precision 10,2; duration > 0 when provided.
+
+Rules: employee and service must share the same business; duplicates → `409`; remove blocked if any `Booking` exists for that employee+service pair → `409`; missing assignment → `404`. Join entity `EmployeeService` / table `EmployeeServices` has composite PK `(EmployeesId, ServicesId)` plus optional overrides.
 
 ---
 
@@ -487,7 +511,7 @@ Missing: delete, search, link to user, booking history for customer.
 ```json
 { "startTime": "2026-11-15T09:00:00+03:30", "endTime": "2026-11-15T09:30:00+03:30" }
 ```
-Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot step from `Booking:SlotIntervalMinutes` (default 15). Uses employee `WorkingHour` rows for the requested local date; occupying statuses = Pending + Confirmed; half-open intervals; past slots omitted. Does **not** reserve a slot.
+Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot step from `Booking:SlotIntervalMinutes` (default 15). Uses employee `WorkingHour` rows for the requested local date; occupying statuses = Pending + Confirmed; half-open intervals; past slots omitted. Does **not** reserve a slot. Slot length uses employee-specific effective duration: `EmployeeService.DurationMinutesOverride ?? Service.DurationMinutes`. Assignment is required. Existing booking overlaps use stored `StartTime`/`EndTime` (not recalculated from current overrides).
 
 **UpdateBookingStatusDto** (enums are numeric JSON — no `JsonStringEnumConverter`)
 ```json

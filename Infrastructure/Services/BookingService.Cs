@@ -369,7 +369,7 @@ public class BookingService : IBookingService
     public async Task<IReadOnlyList<AvailabilitySlotDto>> GetAvailabilityAsync(
         AvailabilityQueryDto query)
     {
-        var (business, service, employee) = await ValidateAvailabilitySelectionAsync(
+        var (business, _, employee, effectiveDurationMinutes) = await ValidateAvailabilitySelectionAsync(
             query.BusinessId,
             query.ServiceId,
             query.EmployeeId);
@@ -403,7 +403,7 @@ public class BookingService : IBookingService
             .ToListAsync();
 
         var utcNow = DateTime.UtcNow;
-        var duration = TimeSpan.FromMinutes(service.DurationMinutes);
+        var duration = TimeSpan.FromMinutes(effectiveDurationMinutes);
         var step = TimeSpan.FromMinutes(_slotIntervalMinutes);
         var slots = new List<AvailabilitySlotDto>();
 
@@ -439,10 +439,11 @@ public class BookingService : IBookingService
         return slots;
     }
 
-    private async Task<(Business Business, Service Service, Employee Employee)> ValidateAvailabilitySelectionAsync(
-        int businessId,
-        int serviceId,
-        int employeeId)
+    private async Task<(Business Business, Service Service, Employee Employee, int EffectiveDurationMinutes)>
+        ValidateAvailabilitySelectionAsync(
+            int businessId,
+            int serviceId,
+            int employeeId)
     {
         var business = await _context.Businesses
             .AsNoTracking()
@@ -463,7 +464,6 @@ public class BookingService : IBookingService
 
         var employee = await _context.Employees
             .AsNoTracking()
-            .Include(e => e.Services)
             .FirstOrDefaultAsync(e => e.Id == employeeId);
 
         if (employee is null)
@@ -472,10 +472,19 @@ public class BookingService : IBookingService
         if (employee.BusinessId != businessId)
             throw new InvalidOperationException("این کارمند متعلق به کسب‌وکار دیگری است.");
 
-        if (employee.Services.All(s => s.Id != serviceId))
+        var assignment = await _context.EmployeeServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(es =>
+                es.EmployeesId == employeeId &&
+                es.ServicesId == serviceId);
+
+        if (assignment is null)
             throw new InvalidOperationException("این کارمند به خدمت انتخاب‌شده تخصیص داده نشده است.");
 
-        return (business, service, employee);
+        var effectiveDurationMinutes =
+            assignment.DurationMinutesOverride ?? service.DurationMinutes;
+
+        return (business, service, employee, effectiveDurationMinutes);
     }
 
     private async Task<Service> ValidateSelectionAsync(
