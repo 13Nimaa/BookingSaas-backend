@@ -25,7 +25,7 @@ public sealed record BookingDetailsServiceDto(
     int Id,
     string Name,
     int DurationMinutes,
-    decimal Price);
+    decimal? Price);
 
 public sealed record BookingDetailsEmployeeDto(
     int Id,

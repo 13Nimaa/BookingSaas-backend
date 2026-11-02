@@ -192,5 +192,6 @@ public class BookingController : ControllerBase
             booking.Status,
             booking.CreatorType,
             booking.CreatedByUserId,
-            booking.CreatedAt);
+            booking.CreatedAt,
+            booking.Price);
 }

@@ -69,6 +69,7 @@ public sealed class BookingCreationTests : IAsyncLifetime
         Assert.Equal(customer.User.UserId, booking.CreatedByUserId);
         Assert.Equal(startTime, booking.StartTime);
         Assert.Equal(startTime.AddMinutes(30), booking.EndTime);
+        Assert.Equal(100000m, booking.Price);
     }
 
     [Fact]
@@ -94,6 +95,7 @@ public sealed class BookingCreationTests : IAsyncLifetime
         Assert.Equal(BookingCreatorType.Guest, booking.CreatorType);
         Assert.Null(booking.CreatedByUserId);
         Assert.Equal(startTime.AddMinutes(30), booking.EndTime);
+        Assert.Equal(100000m, booking.Price);
     }
 
     [Fact]
@@ -311,18 +313,280 @@ public sealed class BookingCreationTests : IAsyncLifetime
         Assert.Equal(sharedPhone, guestCustomer.PhoneNumber);
     }
 
-    private async Task<SetupContext> CreateBookableSetupAsync(string ownerPhone)
+    [Fact]
+    public async Task Authenticated_booking_uses_default_duration_and_price_without_override()
+    {
+        var setup = await CreateBookableSetupAsync("09124000012");
+        var customer = await RegisterCustomerAsync("09124100012");
+        var startTime = DateTime.UtcNow.AddDays(5);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "/api/bookings",
+            customer.AccessToken,
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                employeeId = setup.EmployeeId,
+                startTime,
+                endTime = startTime.AddMinutes(30)
+            });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var booking = await ReadAsync<BookingDto>(response);
+        Assert.Equal(startTime.AddMinutes(30), booking.EndTime);
+        Assert.Equal(100000m, booking.Price);
+
+        var persisted = await GetBookingAsync(booking.Id);
+        Assert.Equal(booking.EndTime, persisted.EndTime, TimeSpan.FromSeconds(1));
+        Assert.Equal(100000m, persisted.Price);
+    }
+
+    [Fact]
+    public async Task Authenticated_booking_uses_employee_duration_and_price_overrides()
+    {
+        var setup = await CreateBookableSetupAsync(
+            "09124000013",
+            priceOverride: 250000m,
+            durationMinutesOverride: 45);
+        var customer = await RegisterCustomerAsync("09124100013");
+        var startTime = DateTime.UtcNow.AddDays(5).AddHours(1);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "/api/bookings",
+            customer.AccessToken,
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                employeeId = setup.EmployeeId,
+                startTime,
+                endTime = startTime.AddMinutes(30)
+            });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var booking = await ReadAsync<BookingDto>(response);
+        Assert.Equal(startTime.AddMinutes(45), booking.EndTime);
+        Assert.Equal(250000m, booking.Price);
+        Assert.NotEqual(startTime.AddMinutes(30), booking.EndTime);
+    }
+
+    [Fact]
+    public async Task Guest_booking_uses_default_duration_and_price_without_override()
+    {
+        var setup = await CreateBookableSetupAsync("09124000014");
+        var startTime = DateTime.UtcNow.AddDays(5).AddHours(2);
+
+        var response = await _client.PostAsJsonAsync("/api/bookings/guest", new
+        {
+            businessId = setup.BusinessId,
+            serviceId = setup.ServiceId,
+            employeeId = setup.EmployeeId,
+            startTime,
+            endTime = startTime.AddMinutes(99),
+            name = "Guest Default",
+            phoneNumber = "09124200014"
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var booking = await ReadAsync<BookingDto>(response);
+        Assert.Equal(startTime.AddMinutes(30), booking.EndTime);
+        Assert.Equal(100000m, booking.Price);
+    }
+
+    [Fact]
+    public async Task Guest_booking_uses_employee_duration_and_price_overrides()
+    {
+        var setup = await CreateBookableSetupAsync(
+            "09124000015",
+            priceOverride: 175000m,
+            durationMinutesOverride: 50);
+        var startTime = DateTime.UtcNow.AddDays(5).AddHours(3);
+
+        var response = await _client.PostAsJsonAsync("/api/bookings/guest", new
+        {
+            businessId = setup.BusinessId,
+            serviceId = setup.ServiceId,
+            employeeId = setup.EmployeeId,
+            startTime,
+            endTime = startTime.AddMinutes(30),
+            name = "Guest Override",
+            phoneNumber = "09124200015"
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var booking = await ReadAsync<BookingDto>(response);
+        Assert.Equal(startTime.AddMinutes(50), booking.EndTime);
+        Assert.Equal(175000m, booking.Price);
+    }
+
+    [Fact]
+    public async Task Stored_booking_price_is_stable_after_service_and_override_changes()
+    {
+        var setup = await CreateBookableSetupAsync(
+            "09124000016",
+            priceOverride: 200000m,
+            durationMinutesOverride: 40);
+        var customer = await RegisterCustomerAsync("09124100016");
+        var startTime = DateTime.UtcNow.AddDays(6);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "/api/bookings",
+            customer.AccessToken,
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                employeeId = setup.EmployeeId,
+                startTime,
+                endTime = startTime.AddMinutes(30)
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var booking = await ReadAsync<BookingDto>(response);
+        Assert.Equal(200000m, booking.Price);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var service = await db.Services.SingleAsync(s => s.Id == setup.ServiceId);
+            service.Price = 999999m;
+
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.PriceOverride = 111111m;
+            await db.SaveChangesAsync();
+        }
+
+        var persisted = await GetBookingAsync(booking.Id);
+        Assert.Equal(200000m, persisted.Price);
+
+        var detail = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/api/bookings/{booking.Id}",
+            setup.OwnerToken);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var body = await ReadAsync<BookingDetailsDto>(detail);
+        Assert.Equal(200000m, body.Service.Price);
+    }
+
+    [Fact]
+    public async Task Legacy_bookings_keep_null_price_without_invented_history()
+    {
+        var setup = await CreateBookableSetupAsync("09124000017");
+        var startTime = DateTime.UtcNow.AddDays(6).AddHours(1);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var customer = new Customer
+            {
+                BusinessId = setup.BusinessId,
+                Name = "Legacy Guest",
+                PhoneNumber = "09124800017",
+                UserId = null,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Customers.Add(customer);
+            await db.SaveChangesAsync();
+
+            db.Bookings.Add(new Booking
+            {
+                BusinessId = setup.BusinessId,
+                CustomerId = customer.Id,
+                ServiceId = setup.ServiceId,
+                EmployeeId = setup.EmployeeId,
+                StartTime = startTime,
+                EndTime = startTime.AddMinutes(30),
+                Price = null,
+                Status = BookingStatus.Pending,
+                CreatorType = BookingCreatorType.Guest,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var legacy = await db.Bookings.AsNoTracking().SingleAsync(b =>
+                b.EmployeeId == setup.EmployeeId &&
+                b.StartTime == startTime);
+            Assert.Null(legacy.Price);
+        }
+    }
+
+    [Fact]
+    public async Task Overlapping_bookings_are_rejected_using_effective_duration()
+    {
+        var setup = await CreateBookableSetupAsync(
+            "09124000018",
+            durationMinutesOverride: 45);
+        var start = DateTime.UtcNow.AddDays(7).Date.AddHours(9);
+
+        var first = await _client.PostAsJsonAsync("/api/bookings/guest", new
+        {
+            businessId = setup.BusinessId,
+            serviceId = setup.ServiceId,
+            employeeId = setup.EmployeeId,
+            startTime = start,
+            endTime = start.AddMinutes(30),
+            name = "First Guest",
+            phoneNumber = "09124200018"
+        });
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var created = await ReadAsync<BookingDto>(first);
+        Assert.Equal(start.AddMinutes(45), created.EndTime);
+
+        // Default 30-minute spacing would be free; effective 45-minute booking overlaps.
+        var overlap = await _client.PostAsJsonAsync("/api/bookings/guest", new
+        {
+            businessId = setup.BusinessId,
+            serviceId = setup.ServiceId,
+            employeeId = setup.EmployeeId,
+            startTime = start.AddMinutes(30),
+            endTime = start.AddMinutes(60),
+            name = "Overlap Guest",
+            phoneNumber = "09124210018"
+        });
+        Assert.Equal(HttpStatusCode.Conflict, overlap.StatusCode);
+    }
+
+    private async Task<Booking> GetBookingAsync(int bookingId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Bookings.AsNoTracking().SingleAsync(b => b.Id == bookingId);
+    }
+
+    private async Task<SetupContext> CreateBookableSetupAsync(
+        string ownerPhone,
+        decimal? priceOverride = null,
+        int? durationMinutesOverride = null)
     {
         var owner = await CreateOwnerWithBusinessAsync(ownerPhone, $"Shop {ownerPhone}");
         var employeePhone = ownerPhone.Replace("09124", "09125", StringComparison.Ordinal);
         var employee = await CreateEmployeeAsync(owner.AccessToken, owner.BusinessId, employeePhone);
         var service = await CreateServiceAsync(owner.AccessToken, owner.BusinessId, "Haircut");
 
+        object assignBody = priceOverride is null && durationMinutesOverride is null
+            ? new { serviceId = service.Id }
+            : new
+            {
+                serviceId = service.Id,
+                priceOverride,
+                durationMinutesOverride
+            };
+
         var assign = await SendAuthorizedAsync(
             HttpMethod.Post,
             $"/api/employees/{employee.Id}/services",
             owner.AccessToken,
-            new { serviceId = service.Id });
+            assignBody);
         assign.EnsureSuccessStatusCode();
 
         return new SetupContext(
@@ -455,7 +719,25 @@ public sealed class BookingCreationTests : IAsyncLifetime
         BookingStatus Status,
         BookingCreatorType CreatorType,
         string? CreatedByUserId,
-        DateTime CreatedAt);
+        DateTime CreatedAt,
+        decimal? Price);
+    private sealed record BookingDetailsDto(
+        int Id,
+        int BusinessId,
+        DateTime StartTime,
+        DateTime EndTime,
+        BookingStatus Status,
+        BookingCreatorType CreatorType,
+        DateTime CreatedAt,
+        string? Notes,
+        BookingDetailsCustomerDto Customer,
+        BookingDetailsServiceDto Service,
+        BookingDetailsEmployeeDto Employee,
+        BookingDetailsBusinessDto Business);
+    private sealed record BookingDetailsCustomerDto(int Id, string Name, string? PhoneNumber);
+    private sealed record BookingDetailsServiceDto(int Id, string Name, int DurationMinutes, decimal? Price);
+    private sealed record BookingDetailsEmployeeDto(int Id, string Name, string? ProfileImageUrl);
+    private sealed record BookingDetailsBusinessDto(int Id, string Name);
     private sealed record OwnerContext(string AccessToken, int BusinessId);
     private sealed record SetupContext(string OwnerToken, int BusinessId, int EmployeeId, int ServiceId);
 }

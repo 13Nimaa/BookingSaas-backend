@@ -14,4 +14,5 @@ public sealed record BookingDto(
     BookingStatus Status,
     BookingCreatorType CreatorType,
     string? CreatedByUserId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    decimal? Price);

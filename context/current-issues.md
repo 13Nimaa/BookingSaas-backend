@@ -39,7 +39,8 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 1. **Dual models:** `Booking` (canonical going forward) vs unused `Appointment` — do not delete Appointment without an explicit migrate plan.
 2. **Phase 1 domain foundation migration not applied:** `20261031213454_BookingDomainFoundation` (creator fields, `TimeZoneId`, Restrict FKs, indexes) exists in repo but is **not applied** to local/Docker DB outside Testcontainers.
 3. **Phase 5 exclusion migration not applied:** `20261101201947_BookingActiveOverlapExclusion` (`btree_gist` + active-booking overlap exclude) exists in repo; Testcontainers apply it via `MigrateAsync`. Local/Docker app DBs need explicit `database update`.
-3b. **EmployeeService overrides migration not applied:** `20261102103531_EmployeeServiceOverrides` (`PriceOverride`, `DurationMinutesOverride`) exists in repo; Testcontainers apply via `MigrateAsync`. Availability/booking still use `Service` defaults only until later phases resolve overrides.
+3b. **EmployeeService overrides migration not applied:** `20261102103531_EmployeeServiceOverrides` (`PriceOverride`, `DurationMinutesOverride`) exists in repo; Testcontainers apply via `MigrateAsync`.
+3c. **Booking price snapshot migration not applied:** `20261102130009_BookingPriceSnapshot` (`Bookings.Price` nullable) exists in repo; Testcontainers apply via `MigrateAsync`. Legacy rows keep `Price = null` (no invented historical prices).
 4. **Availability is informational only** — `GET /api/bookings/availability` does not reserve slots; create enforces overlap via DB exclusion (after Phase 5 migration is applied).
 5. **No owner-create-on-behalf endpoint** yet (`GET /api/bookings/mine` customer history is live; owner/employee list + detail exist).
 6. **Create DTOs expose `EndTime` but service ignores it** — `EndTime` is always `StartTime + DurationMinutes`; clients can send a mismatched value with no validation (contract footgun).

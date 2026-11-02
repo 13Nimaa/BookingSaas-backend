@@ -43,7 +43,7 @@ public class BookingService : IBookingService
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            var service = await ValidateSelectionAsync(
+            var selection = await ValidateSelectionAsync(
                 dto.BusinessId,
                 dto.ServiceId,
                 dto.EmployeeId,
@@ -59,7 +59,8 @@ public class BookingService : IBookingService
                 dto.ServiceId,
                 dto.EmployeeId,
                 dto.StartTime,
-                service.DurationMinutes,
+                selection.EffectiveDurationMinutes,
+                selection.EffectivePrice,
                 BookingCreatorType.Customer,
                 userId);
 
@@ -82,7 +83,7 @@ public class BookingService : IBookingService
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            var service = await ValidateSelectionAsync(
+            var selection = await ValidateSelectionAsync(
                 dto.BusinessId,
                 dto.ServiceId,
                 dto.EmployeeId,
@@ -99,7 +100,8 @@ public class BookingService : IBookingService
                 dto.ServiceId,
                 dto.EmployeeId,
                 dto.StartTime,
-                service.DurationMinutes,
+                selection.EffectiveDurationMinutes,
+                selection.EffectivePrice,
                 BookingCreatorType.Guest,
                 createdByUserId: null);
 
@@ -310,7 +312,7 @@ public class BookingService : IBookingService
                     b.Service.Id,
                     b.Service.Title,
                     b.Service.DurationMinutes,
-                    b.Service.Price),
+                    b.Price),
                 new BookingDetailsEmployeeDto(
                     b.Employee.Id,
                     b.Employee.User.FullName,
@@ -487,7 +489,10 @@ public class BookingService : IBookingService
         return (business, service, employee, effectiveDurationMinutes);
     }
 
-    private async Task<Service> ValidateSelectionAsync(
+    private async Task<(
+        Service Service,
+        int EffectiveDurationMinutes,
+        decimal EffectivePrice)> ValidateSelectionAsync(
         int businessId,
         int serviceId,
         int employeeId,
@@ -512,7 +517,6 @@ public class BookingService : IBookingService
             throw new InvalidOperationException("این خدمت متعلق به کسب‌وکار دیگری است.");
 
         var employee = await _context.Employees
-            .Include(e => e.Services)
             .FirstOrDefaultAsync(e => e.Id == employeeId);
 
         if (employee is null)
@@ -521,10 +525,20 @@ public class BookingService : IBookingService
         if (employee.BusinessId != businessId)
             throw new InvalidOperationException("این کارمند متعلق به کسب‌وکار دیگری است.");
 
-        if (employee.Services.All(s => s.Id != serviceId))
+        var assignment = await _context.EmployeeServices
+            .FirstOrDefaultAsync(es =>
+                es.EmployeesId == employeeId &&
+                es.ServicesId == serviceId);
+
+        if (assignment is null)
             throw new InvalidOperationException("این کارمند به خدمت انتخاب‌شده تخصیص داده نشده است.");
 
-        return service;
+        var effectiveDurationMinutes =
+            assignment.DurationMinutesOverride ?? service.DurationMinutes;
+        var effectivePrice =
+            assignment.PriceOverride ?? service.Price;
+
+        return (service, effectiveDurationMinutes, effectivePrice);
     }
 
     private static Booking BuildBooking(
@@ -534,6 +548,7 @@ public class BookingService : IBookingService
         int employeeId,
         DateTime startTime,
         int durationMinutes,
+        decimal price,
         BookingCreatorType creatorType,
         string? createdByUserId) =>
         new()
@@ -544,6 +559,7 @@ public class BookingService : IBookingService
             EmployeeId = employeeId,
             StartTime = startTime,
             EndTime = startTime.AddMinutes(durationMinutes),
+            Price = price,
             Status = BookingStatus.Pending,
             CreatorType = creatorType,
             CreatedByUserId = createdByUserId,

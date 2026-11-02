@@ -169,6 +169,9 @@ namespace BookingSaas_backend.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<int>("ServiceId")
                         .HasColumnType("integer");
 

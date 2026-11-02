@@ -68,12 +68,13 @@ type BookingDto = {
   serviceId: number;
   employeeId: number;
   startTime: string; // ISO UTC
-  endTime: string;   // ISO UTC (server-calculated)
+  endTime: string;   // ISO UTC (server-calculated from effective duration)
   notes: string | null;
   status: number;    // BookingStatus
   creatorType: number;
   createdByUserId: string | null;
   createdAt: string; // ISO UTC
+  price: number | null; // snapshot at create; null on legacy rows
 };
 ```
 
@@ -139,7 +140,7 @@ No new endpoints. FE implications:
 
 ---
 
-## 5. Spec 03 — Employee ↔ service assignment
+## 5. Spec 03 — Employee ↔ service assignment (+ price/duration overrides)
 
 Base: `/api/employees/{employeeId}/services`  
 Auth: **BusinessOwner** only (must own the employee’s business).
@@ -147,16 +148,27 @@ Auth: **BusinessOwner** only (must own the employee’s business).
 ### Types
 
 ```ts
-type ServiceDto = {
-  id: number;
+type EmployeeServiceDto = {
+  id: number; // service id
   title: string;
-  price: number;
-  durationMinutes: number;
+  defaultPrice: number;              // live Service.Price
+  defaultDurationMinutes: number;    // live Service.DurationMinutes
+  priceOverride: number | null;      // null = inherit default
+  durationMinutesOverride: number | null;
+  effectivePrice: number;            // priceOverride ?? defaultPrice
+  effectiveDurationMinutes: number;  // durationMinutesOverride ?? defaultDurationMinutes
   businessId: number;
 };
 
 type AssignServiceDto = {
   serviceId: number;
+  priceOverride?: number | null;           // omit/null → inherit
+  durationMinutesOverride?: number | null; // omit/null → inherit
+};
+
+type UpdateEmployeeServiceDto = {
+  priceOverride?: number | null;
+  durationMinutesOverride?: number | null;
 };
 ```
 
@@ -164,7 +176,7 @@ type AssignServiceDto = {
 
 #### List assigned services
 
-`GET /api/employees/{employeeId}/services` → `200` `ServiceDto[]`
+`GET /api/employees/{employeeId}/services` → `200` `EmployeeServiceDto[]`
 
 #### Assign
 
@@ -174,9 +186,39 @@ type AssignServiceDto = {
 { "serviceId": 5 }
 ```
 
-`201` → `ServiceDto`  
+Optional overrides:
+
+```json
+{ "serviceId": 5, "priceOverride": 300000, "durationMinutesOverride": 45 }
+```
+
+`201` → `EmployeeServiceDto`  
+`400` invalid price/duration  
 `404` employee/service missing  
 `409` wrong business / already assigned  
+
+`{ "serviceId": 5 }` alone remains valid (both overrides null).
+
+#### Update overrides
+
+`PUT /api/employees/{employeeId}/services/{serviceId}`
+
+```json
+{ "priceOverride": 300000, "durationMinutesOverride": 45 }
+```
+
+**Omit vs null (important):**
+
+| JSON | Effect |
+|------|--------|
+| Property omitted | Leave that override unchanged |
+| `"priceOverride": null` | Reset price to inherit Service default |
+| `"durationMinutesOverride": 45` | Set only duration; leave price as-is if omitted |
+
+`200` → `EmployeeServiceDto`  
+`400` invalid values  
+`404` assignment missing  
+`403` not owner  
 
 #### Remove
 
@@ -189,6 +231,8 @@ type AssignServiceDto = {
 **FE checklist**
 
 - Only show assign UI to owners.
+- Show **effective** price/duration in owner UI; keep defaults visible for comparison.
+- For PUT, send explicit `null` only when resetting; omit fields you are not editing.
 - Booking create requires employee assigned to service — gate the employee dropdown by this list (or refetch after assign).
 - On `409` when removing, explain that bookings exist.
 
@@ -242,16 +286,17 @@ Guest bookings are **not** linked to a registered account by phone match.
 
 ### Important create rules (FE)
 
-1. Prefer picking `startTime` from **availability** slots (spec 05).
-2. Set `endTime` to `startTime + durationMinutes` for the payload (or any valid ISO) — server recalculates from `Service.DurationMinutes`.
-3. On success, show Pending state; do not claim the slot is “confirmed”.
-4. Handle:
+1. Prefer picking `startTime` from **availability** slots (spec 05) — slot length already uses the employee’s effective duration.
+2. Set `endTime` to any valid ISO (often `startTime + effectiveDuration`) — server **recalculates** from `DurationMinutesOverride ?? Service.DurationMinutes` and ignores client `endTime`.
+3. Server stores `price` snapshot from `PriceOverride ?? Service.Price`. Do not send a client price.
+4. On success, show Pending state and the returned `price` / `endTime`; do not claim the slot is “confirmed”.
+5. Handle:
 
 | Status | Meaning |
 |--------|---------|
 | `400` | Validation (ProblemDetails) |
 | `404` | Business/service/employee missing (Persian string) |
-| `409` | Overlap / conflict (Persian string) — see spec 06 |
+| `409` | Overlap / missing assignment / wrong business (Persian string) — see spec 06 |
 | `401` | Auth create without token |
 
 ---
@@ -282,14 +327,18 @@ type AvailabilitySlot = {
 **200** → `AvailabilitySlot[]`  
 Empty array = no free slots (not an error).
 
+**Duration rule**
+
+Slot length = `EmployeeService.DurationMinutesOverride ?? Service.DurationMinutes` for the selected employee+service. Interval step stays **15 minutes** by default (`Booking:SlotIntervalMinutes`) even when duration is longer.
+
 **FE checklist**
 
 - Jalali date picker → Gregorian `yyyy-MM-dd` for `date`.
 - Display slot labels in business-local time (offset is in the string).
-- When user picks a slot, send that `startTime` (as UTC ISO) to create.
+- When user picks a slot, send that `startTime` (as UTC ISO) to create; use the slot’s `endTime` only for display — create recalculates.
 - **Availability does not reserve** — always ready for create `409`.
-- Occupy rules: Pending + Confirmed block; Cancelled / Expired / Completed do not.
-- Slot step default: **15 minutes** (`Booking:SlotIntervalMinutes`).
+- Occupy rules: Pending + Confirmed block; Cancelled / Expired / Completed do not. Overlaps use stored booking `StartTime`/`EndTime`.
+- Employee must be assigned to the service (`409` otherwise).
 - Past slots are omitted server-side.
 
 ---
@@ -417,7 +466,7 @@ type BookingDetails = {
   createdAt: string;
   notes: string | null;
   customer: { id: number; name: string; phoneNumber: string | null };
-  service: { id: number; name: string; durationMinutes: number; price: number };
+  service: { id: number; name: string; durationMinutes: number; price: number | null }; // price = Booking.Price snapshot
   employee: { id: number; name: string; profileImageUrl: string | null };
   business: { id: number; name: string };
 };
@@ -544,7 +593,7 @@ Creator:
 | Method | Path | Auth |
 |--------|------|------|
 | CRUD | `/api/business/{businessId}/customers…` | Owner/Admin |
-| `GET/POST/DELETE` | `/api/employees/{employeeId}/services…` | Owner |
+| `GET/POST/PUT/DELETE` | `/api/employees/{employeeId}/services…` | Owner |
 | `GET` | `/api/bookings/availability` | Anonymous |
 | `POST` | `/api/bookings` | Authenticated |
 | `POST` | `/api/bookings/guest` | Anonymous |

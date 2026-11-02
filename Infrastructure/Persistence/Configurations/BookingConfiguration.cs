@@ -12,6 +12,7 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.Property(b => b.CreatorType).IsRequired();
         builder.Property(b => b.CreatedByUserId).HasMaxLength(450);
+        builder.Property(b => b.Price).HasColumnType("decimal(10,2)");
 
         builder.HasOne(b => b.Business)
             .WithMany()

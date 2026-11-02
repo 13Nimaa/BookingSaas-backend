@@ -421,7 +421,7 @@ public sealed class BookingDetailTests : IAsyncLifetime
         string? CreatedByUserId,
         DateTime CreatedAt);
     private sealed record BookingDetailsCustomerDto(int Id, string Name, string? PhoneNumber);
-    private sealed record BookingDetailsServiceDto(int Id, string Name, int DurationMinutes, decimal Price);
+    private sealed record BookingDetailsServiceDto(int Id, string Name, int DurationMinutes, decimal? Price);
     private sealed record BookingDetailsEmployeeDto(int Id, string Name, string? ProfileImageUrl);
     private sealed record BookingDetailsBusinessDto(int Id, string Name);
     private sealed record BookingDetailsDto(

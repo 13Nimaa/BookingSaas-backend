@@ -1,9 +1,87 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 3 — Availability Integration with Employee-Specific Service Duration (`feature spec/15- Availability Integration with Employee-Specific Service Duration.md`) — **Complete**  
-**Prior:** Phase 2 — Employee-Service API Upgrade — complete  
+**Current task:** Phase 5 — Integration & Regression Testing (employee-specific price/duration) — **Complete**  
+**Prior:** Phase 4 — Booking Integration with Employee-Specific Pricing and Duration — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 5 — Integration & Regression (employee-specific price/duration)
+
+Spec: `context/feature spec/17- Integration & Regression Testing.md`
+
+| Area | Status |
+|------|--------|
+| E2E chain: assign → availability → override → auth/guest book → snapshot stability | Verified (new test) |
+| Cross-feature consistency (overrides / availability / create / details) | Verified — no bugs found |
+| Regression suites (ES, avail, create, concurrency, status, expire, detail) | **102 passed** |
+| Frontend contract docs (`Booking-MVP-frontend.md`) | Updated |
+| Migration `BookingPriceSnapshot` reviewed | Safe nullable add; **not applied** |
+| Frontend implementation | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `tests/.../EmployeeServicePricingIntegrationTests.cs` | Chained E2E + omit/null PUT check |
+| `context/Booking-MVP-frontend.md` | FE contracts for overrides / price snapshot |
+| `context/feature spec/17-…md` | Spec saved |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~EmployeeServicePricingIntegrationTests|FullyQualifiedName~EmployeeServicesTests|FullyQualifiedName~BookingAvailabilityTests|FullyQualifiedName~BookingCreationTests|FullyQualifiedName~BookingConcurrencyTests|FullyQualifiedName~BookingStatusManagementTests|FullyQualifiedName~BookingPendingExpirationTests|FullyQualifiedName~BookingDetailTests" --verbosity minimal
+```
+
+Result: **102 total — 102 passed**.
+
+## Migration apply (later, on request)
+
+```bash
+dotnet ef database update BookingPriceSnapshot --project BookingSaas-backend.csproj
+```
+
+Applies all pending migrations up through `BookingPriceSnapshot` (including `EmployeeServiceOverrides` if not yet applied).
+
+---
+
+# Phase 4 — Booking Integration with Employee-Specific Pricing & Duration
+
+Spec: `context/feature spec/16- Booking Integration with Employee-Specific Pricing and Duration.md`
+
+| Area | Status |
+|------|--------|
+| Create auth + guest use `DurationMinutesOverride ?? Service.DurationMinutes` | Done |
+| Create auth + guest use `PriceOverride ?? Service.Price` | Done |
+| `Booking.Price` snapshot column (nullable for legacy) | Done |
+| Server-side `EndTime` from effective duration | Done |
+| Detail DTO price from booking snapshot | Done |
+| Exclusion / 409 concurrency preserved | Done |
+| Migration `20261102130009_BookingPriceSnapshot` | Done (created, **not applied**) |
+| Availability / Employee-Service contracts | Unchanged |
+| Phase 5 regression suite | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Domain/Entities/Booking.cs` | `Price` snapshot |
+| `Infrastructure/Persistence/Configurations/BookingConfiguration.cs` | `decimal(10,2)` |
+| `Infrastructure/Services/BookingService.Cs` | Resolve assignment + effective values |
+| `Application/Dtos/Booking/BookingDto.cs` | Expose `Price` |
+| `Application/Dtos/Booking/BookingDetailsDto.cs` | Snapshot `Price` |
+| `Controllers/BookingController.cs` | Map `Price` |
+| `Migrations/20261102130009_BookingPriceSnapshot.cs` | Add nullable `Price` |
+| `tests/.../BookingCreationTests.cs` | Duration/price/conflict coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~BookingCreationTests|FullyQualifiedName~BookingDetailTests|FullyQualifiedName~BookingConcurrencyTests" --verbosity minimal
+```
+
+Result: **35 total — 35 passed** (Creation 16, Detail 9, Concurrency 10). Migration **not applied**.
 
 ---
 
@@ -584,6 +662,6 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 
 # Next
 
-1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides` — only on request).
-2. Phase 4 — Booking Integration: create bookings using effective duration (and later price snapshot).
+1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides`, `BookingPriceSnapshot` — only on request).
+2. Frontend: wire EmployeeService overrides + booking `price` snapshot (see `Booking-MVP-frontend.md`).
 3. Later booking phases: customer self-cancel / reschedule — only when specified.

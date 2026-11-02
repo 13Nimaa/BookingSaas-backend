@@ -20,6 +20,9 @@ public class Booking
 
     public DateTime EndTime { get; set; }
 
+    // Snapshot at creation; null for legacy rows created before this column existed.
+    public decimal? Price { get; set; }
+
     public string? Notes { get; set; }
 
     public BookingStatus Status { get; set; } = BookingStatus.Pending;

@@ -41,6 +41,7 @@
 - One owner → one business (`Business.Owner` / `ApplicationUser.OwnedBusiness`).
 - Customers are per-business; guests have `UserId = null`.
 - Employee↔Service assignments use explicit join entity `EmployeeService` (`EmployeeServices` table) with optional `PriceOverride` / `DurationMinutesOverride` (null = inherit `Service` defaults). Skip navigations `Employee.Services` / `Service.Employees` remain.
+- Booking create + availability resolve effective duration/price from the assignment; `Booking.Price` stores a create-time snapshot (nullable for legacy rows).
 - Identity roles (`Customer`, `BusinessOwner`, `Employee`, `Admin`) are authoritative. `ApplicationUser.Role` enum is legacy/unused by controllers.
 
 ## EF Configuration

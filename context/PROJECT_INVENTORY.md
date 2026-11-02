@@ -144,7 +144,8 @@ Composite PK `(EmployeesId, ServicesId)` prevents duplicates. Cascade delete wit
 | CustomerId | `int` | Restrict delete |
 | ServiceId | `int` | Restrict delete |
 | EmployeeId | `int` | Restrict delete |
-| StartTime / EndTime | `DateTime` | UTC timestamps; EndTime calculated server-side |
+| StartTime / EndTime | `DateTime` | UTC timestamps; EndTime = Start + effective duration server-side |
+| Price | `decimal(10,2)?` | Snapshot at create (`PriceOverride ?? Service.Price`); null for legacy rows; migration `BookingPriceSnapshot` **not applied** |
 | Notes | `string?` | |
 | Status | `BookingStatus` | Pending / Confirmed / Cancelled / Completed / **Expired** |
 | CreatorType | `BookingCreatorType` | Customer / Guest / BusinessOwner |
@@ -474,7 +475,7 @@ Missing: delete, search, link to user, booking history for customer.
   "endTime": "2026-01-01T10:30:00Z"
 }
 ```
-`endTime` in the body is ignored; server sets `EndTime = StartTime + Service.DurationMinutes`.
+`endTime` in the body is ignored; server sets `EndTime = StartTime + (EmployeeService.DurationMinutesOverride ?? Service.DurationMinutes)` and stores `Price = PriceOverride ?? Service.Price`.
 
 **CreateGuestBookingDto**
 ```json
@@ -503,9 +504,11 @@ Missing: delete, search, link to user, booking history for customer.
   "status": 0,
   "creatorType": 0,
   "createdByUserId": "string|null",
-  "createdAt": "..."
+  "createdAt": "...",
+  "price": 100000
 }
 ```
+`price` is the booking snapshot (nullable for legacy rows).
 
 **AvailabilitySlotDto**
 ```json
@@ -554,12 +557,12 @@ Timestamps are ISO 8601 `DateTimeOffset` in the business timezone offset. Slot s
   "createdAt": "...",
   "notes": null,
   "customer": { "id": 1, "name": "string", "phoneNumber": "string|null" },
-  "service": { "id": 1, "name": "string", "durationMinutes": 30, "price": 0 },
+  "service": { "id": 1, "name": "string", "durationMinutes": 30, "price": 100000 },
   "employee": { "id": 1, "name": "string", "profileImageUrl": "string|null" },
   "business": { "id": 1, "name": "string" }
 }
 ```
-`service.name` maps from `Service.Title` (entity has no Description). `employee.profileImageUrl` from `ApplicationUser.ProfileImageUrl`.
+`service.name` maps from `Service.Title` (entity has no Description). `service.price` is the booking snapshot (`Booking.Price`), not the live Service price. `employee.profileImageUrl` from `ApplicationUser.ProfileImageUrl`.
 
 **Customer booking history (`GET /api/bookings/mine`)** — any authenticated user; returns only bookings whose `Customer.UserId` matches the JWT user id (never client-supplied CustomerId/UserId). Supports multiple Customer rows across businesses. Guest customers (`UserId` null) are never included via phone matching. No Customer record → empty `PagedResult`. Owner/employee tokens cannot broaden scope to other customers' history. Filters: `status`, `fromDate`/`toDate` (UTC inclusive on `StartTime`). Defaults: `page=1`, `pageSize=20` (max 100). Sort: `StartTime` desc, then `Id` desc.
 
@@ -597,6 +600,7 @@ Rules (create): business/service/employee must exist and share business; employe
 | `20261031_BookingDomainFoundation` | Business.TimeZoneId; Booking creator fields; Restrict FKs + time indexes (**not applied**) |
 | `20261101_BookingActiveOverlapExclusion` | `btree_gist` + partial EXCLUDE on active booking time ranges (**not applied**) |
 | `20261102_EmployeeServiceOverrides` | `EmployeeServices.PriceOverride` + `DurationMinutesOverride` nullable (**not applied**) |
+| `20261102_BookingPriceSnapshot` | `Bookings.Price` nullable snapshot (**not applied**) |
 
 ---
 
