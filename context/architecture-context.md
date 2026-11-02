@@ -40,6 +40,7 @@
 - **`Appointment` is legacy / unused by API.** Do not modify or delete it unless a dedicated migrate/remove task says so.
 - One owner → one business (`Business.Owner` / `ApplicationUser.OwnedBusiness`).
 - Customers are per-business; guests have `UserId = null`.
+- Employee↔Service assignments use explicit join entity `EmployeeService` (`EmployeeServices` table) with optional `PriceOverride` / `DurationMinutesOverride` (null = inherit `Service` defaults). Skip navigations `Employee.Services` / `Service.Employees` remain.
 - Identity roles (`Customer`, `BusinessOwner`, `Employee`, `Admin`) are authoritative. `ApplicationUser.Role` enum is legacy/unused by controllers.
 
 ## EF Configuration

@@ -325,6 +325,27 @@ namespace BookingSaas_backend.Migrations
                     b.ToTable("Employees");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EmployeeService", b =>
+                {
+                    b.Property<int>("EmployeesId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ServicesId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DurationMinutesOverride")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("PriceOverride")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.HasKey("EmployeesId", "ServicesId");
+
+                    b.HasIndex("ServicesId");
+
+                    b.ToTable("EmployeeServices", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -416,21 +437,6 @@ namespace BookingSaas_backend.Migrations
                     b.HasIndex("EmployeeId");
 
                     b.ToTable("WorkingHours");
-                });
-
-            modelBuilder.Entity("EmployeeService", b =>
-                {
-                    b.Property<int>("EmployeesId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ServicesId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("EmployeesId", "ServicesId");
-
-                    b.HasIndex("ServicesId");
-
-                    b.ToTable("EmployeeServices", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -682,6 +688,25 @@ namespace BookingSaas_backend.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EmployeeService", b =>
+                {
+                    b.HasOne("Domain.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServicesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Service");
+                });
+
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
                     b.HasOne("Domain.Entities.ApplicationUser", "User")
@@ -713,21 +738,6 @@ namespace BookingSaas_backend.Migrations
                         .IsRequired();
 
                     b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("EmployeeService", b =>
-                {
-                    b.HasOne("Domain.Entities.Employee", null)
-                        .WithMany()
-                        .HasForeignKey("EmployeesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Service", null)
-                        .WithMany()
-                        .HasForeignKey("ServicesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

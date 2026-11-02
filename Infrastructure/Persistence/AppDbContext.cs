@@ -12,6 +12,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<EmployeeService> EmployeeServices => Set<EmployeeService>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<WorkingHour> WorkingHours => Set<WorkingHour>();

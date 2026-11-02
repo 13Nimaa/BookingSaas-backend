@@ -2,6 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Domain.Entities;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BookingSaas_backend.Tests;
@@ -157,6 +161,150 @@ public sealed class EmployeeServicesTests : IAsyncLifetime
             setup.OwnerToken);
 
         Assert.Equal(HttpStatusCode.NotFound, remove.StatusCode);
+    }
+
+    [Fact]
+    public async Task Assign_service_persists_null_overrides()
+    {
+        var setup = await CreateOwnerWithEmployeeAndServiceAsync("09122000009");
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/employees/{setup.EmployeeId}/services",
+            setup.OwnerToken,
+            new { serviceId = setup.ServiceId });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var assignment = await GetAssignmentAsync(setup.EmployeeId, setup.ServiceId);
+        Assert.Null(assignment.PriceOverride);
+        Assert.Null(assignment.DurationMinutesOverride);
+    }
+
+    [Fact]
+    public async Task EmployeeService_can_store_custom_price_override()
+    {
+        var setup = await CreateOwnerWithEmployeeAndServiceAsync("09122000010");
+        await AssignViaApiAsync(setup);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.PriceOverride = 150000m;
+            await db.SaveChangesAsync();
+        }
+
+        var persisted = await GetAssignmentAsync(setup.EmployeeId, setup.ServiceId);
+        Assert.Equal(150000m, persisted.PriceOverride);
+        Assert.Null(persisted.DurationMinutesOverride);
+    }
+
+    [Fact]
+    public async Task EmployeeService_can_store_custom_duration_override()
+    {
+        var setup = await CreateOwnerWithEmployeeAndServiceAsync("09122000011");
+        await AssignViaApiAsync(setup);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.DurationMinutesOverride = 45;
+            await db.SaveChangesAsync();
+        }
+
+        var persisted = await GetAssignmentAsync(setup.EmployeeId, setup.ServiceId);
+        Assert.Null(persisted.PriceOverride);
+        Assert.Equal(45, persisted.DurationMinutesOverride);
+    }
+
+    [Fact]
+    public async Task EmployeeService_overrides_can_be_null_independently()
+    {
+        var setup = await CreateOwnerWithEmployeeAndServiceAsync("09122000012");
+        await AssignViaApiAsync(setup);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.PriceOverride = 200000m;
+            assignment.DurationMinutesOverride = 60;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.PriceOverride = null;
+            await db.SaveChangesAsync();
+        }
+
+        var afterPriceCleared = await GetAssignmentAsync(setup.EmployeeId, setup.ServiceId);
+        Assert.Null(afterPriceCleared.PriceOverride);
+        Assert.Equal(60, afterPriceCleared.DurationMinutesOverride);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var assignment = await db.EmployeeServices.SingleAsync(es =>
+                es.EmployeesId == setup.EmployeeId &&
+                es.ServicesId == setup.ServiceId);
+            assignment.DurationMinutesOverride = null;
+            assignment.PriceOverride = 175000m;
+            await db.SaveChangesAsync();
+        }
+
+        var afterDurationCleared = await GetAssignmentAsync(setup.EmployeeId, setup.ServiceId);
+        Assert.Equal(175000m, afterDurationCleared.PriceOverride);
+        Assert.Null(afterDurationCleared.DurationMinutesOverride);
+    }
+
+    [Fact]
+    public async Task Duplicate_EmployeeService_assignment_is_prevented_at_database()
+    {
+        var setup = await CreateOwnerWithEmployeeAndServiceAsync("09122000013");
+        await AssignViaApiAsync(setup);
+
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.EmployeeServices.Add(new EmployeeService
+        {
+            EmployeesId = setup.EmployeeId,
+            ServicesId = setup.ServiceId
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
+    private async Task AssignViaApiAsync(SetupContext setup)
+    {
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/employees/{setup.EmployeeId}/services",
+            setup.OwnerToken,
+            new { serviceId = setup.ServiceId });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    private async Task<EmployeeService> GetAssignmentAsync(int employeeId, int serviceId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.EmployeeServices
+            .AsNoTracking()
+            .SingleAsync(es =>
+                es.EmployeesId == employeeId &&
+                es.ServicesId == serviceId);
     }
 
     private async Task<SetupContext> CreateOwnerWithEmployeeAndServiceAsync(string ownerPhone)

@@ -94,10 +94,20 @@ A user can only be one employee (unique 1:1 with user). Code also rejects if alr
 |-------|------|-------|
 | Id | `int` | |
 | Title | `string` | max 150 |
-| Price | `decimal(10,2)` | |
-| DurationMinutes | `int` | |
+| Price | `decimal(10,2)` | Default price (source of truth when assignment has no override) |
+| DurationMinutes | `int` | Default duration (source of truth when assignment has no override) |
 | BusinessId | `int` | Cascade |
-| Employees | M2M | Join table `EmployeeServices` |
+| Employees | M2M | Via explicit join entity `EmployeeService` / table `EmployeeServices` |
+
+### `EmployeeService` (employee ↔ service assignment)
+| Field | Type | Notes |
+|-------|------|-------|
+| EmployeesId | `int` | FK → Employee, part of composite PK |
+| ServicesId | `int` | FK → Service, part of composite PK |
+| PriceOverride | `decimal(10,2)?` | Null = inherit `Service.Price` |
+| DurationMinutesOverride | `int?` | Null = inherit `Service.DurationMinutes` |
+
+Composite PK `(EmployeesId, ServicesId)` prevents duplicates. Cascade delete with Employee/Service. Migration `EmployeeServiceOverrides` adds override columns (**not applied** outside Testcontainers).
 
 ### `WorkingHour`
 | Field | Type | Notes |
@@ -349,7 +359,7 @@ All: **`BusinessOwner`** + must own the employee's business (derived from DB; cl
 { "serviceId": 1 }
 ```
 
-Rules: employee and service must share the same business; duplicates → `409`; remove blocked if any `Booking` exists for that employee+service pair → `409`; missing assignment → `404`. Join table `EmployeeServices` already has composite PK `(EmployeesId, ServicesId)`.
+Rules: employee and service must share the same business; duplicates → `409`; remove blocked if any `Booking` exists for that employee+service pair → `409`; missing assignment → `404`. Join entity `EmployeeService` / table `EmployeeServices` has composite PK `(EmployeesId, ServicesId)` plus optional `PriceOverride` / `DurationMinutesOverride` (null = inherit Service defaults). PUT override endpoint not implemented yet.
 
 ---
 
@@ -562,6 +572,7 @@ Rules (create): business/service/employee must exist and share business; employe
 | `20261031_AddCustomerCrmFields` | Customer CRM email / IsActive / indexes |
 | `20261031_BookingDomainFoundation` | Business.TimeZoneId; Booking creator fields; Restrict FKs + time indexes (**not applied**) |
 | `20261101_BookingActiveOverlapExclusion` | `btree_gist` + partial EXCLUDE on active booking time ranges (**not applied**) |
+| `20261102_EmployeeServiceOverrides` | `EmployeeServices.PriceOverride` + `DurationMinutesOverride` nullable (**not applied**) |
 
 ---
 
@@ -706,7 +717,7 @@ Controllers/
   BookingController.cs
 
 Domain/Entities/
-  ApplicationUser, Business, Employee, Service, WorkingHour,
+  ApplicationUser, Business, Employee, EmployeeService, Service, WorkingHour,
   Customer, Booking, Appointment, RefreshToken
 
 Application/

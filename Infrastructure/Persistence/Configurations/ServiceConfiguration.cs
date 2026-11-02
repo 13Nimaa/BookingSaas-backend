@@ -16,9 +16,9 @@ public class ServiceConfiguration : IEntityTypeConfiguration<Service>
             .HasForeignKey(s => s.BusinessId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // many-to-many با Employee — EF Core خودش جدول واسط می‌سازه
+        // many-to-many با Employee — join entity holds optional price/duration overrides
         builder.HasMany(s => s.Employees)
             .WithMany(e => e.Services)
-            .UsingEntity(j => j.ToTable("EmployeeServices"));
+            .UsingEntity<EmployeeService>();
     }
 }

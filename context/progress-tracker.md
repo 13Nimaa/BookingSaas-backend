@@ -1,9 +1,95 @@
 # Backend progress
 
 **Last updated:** 2026-11-02  
-**Current task:** Phase 10 — Customer Booking History API (`feature-spec/11-Customer-Booking-History-API.md`) — **Complete**  
-**Prior:** Phase 9 — Booking Details API — complete  
+**Current task:** Phase 1 — Upgrade EmployeeService Domain Model (`feature specs/13-Upgrade EmployeeService Domain Model.md`) — **Complete**  
+**Prior:** Phase 11 — Booking MVP Integration & Production Readiness — complete (verification)  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Phase 1 — Upgrade EmployeeService Domain Model
+
+Spec: `context/feature specs/13-Upgrade EmployeeService Domain Model.md`
+
+| Area | Status |
+|------|--------|
+| Explicit `EmployeeService` join entity | Done |
+| `PriceOverride` nullable `decimal(10,2)` | Done |
+| `DurationMinutesOverride` nullable `int` | Done |
+| EF config preserves FKs / composite PK / Cascade | Done |
+| Skip navigations `Employee.Services` / `Service.Employees` preserved | Done |
+| Migration `20261102103531_EmployeeServiceOverrides` | Done (created, **not applied**) |
+| Existing GET/POST/DELETE API unchanged | Done |
+| Integration tests (11) | Done |
+| PUT endpoint / availability / booking price-duration resolution | Out of scope |
+
+## Files (this phase)
+
+| Path | Role |
+|------|------|
+| `Domain/Entities/EmployeeService.cs` | Join entity + override columns |
+| `Infrastructure/Persistence/Configurations/EmployeeServiceConfiguration.cs` | Fluent mapping |
+| `Infrastructure/Persistence/Configurations/ServiceConfiguration.cs` | `UsingEntity<EmployeeService>()` |
+| `Infrastructure/Persistence/AppDbContext.cs` | `DbSet<EmployeeService>` |
+| `Migrations/20261102103531_EmployeeServiceOverrides.cs` | Add nullable override columns |
+| `tests/.../EmployeeServicesTests.cs` | Override + duplicate coverage |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~EmployeeServicesTests" --verbosity minimal
+```
+
+Result: **11 total — 11 passed**. Docker required. Migration **not applied**.
+
+---
+
+# Phase 11 — Booking MVP Integration & Production Readiness
+
+Spec: `context/feature-spec/12-mvp-full-test.md`
+
+Verification only — no feature code changes; no migrations applied to prod/local app DB.
+
+| Area | Status |
+|------|--------|
+| E2E scenarios A–E (covered by existing integration tests; steps not one chained test) | Verified by test |
+| Authorization rules (owner/employee/customer/guest) | Verified by test |
+| API contract review | Inspected (warnings logged) |
+| Migrations + Postgres EXCLUDE/`btree_gist` | Inspected (9 migrations; apply rights are a deploy concern) |
+| Production config | Inspected (blockers below) |
+| Full test suite | **141 passed / 0 failed** |
+| Release build | **Succeeded** (NU1903 OpenAPI advisory) |
+
+## Verdict
+
+| Target | Result |
+|--------|--------|
+| Frontend integration | **Ready** |
+| MVP deployment | **Not ready** — secrets/config + Postgres extension privileges |
+
+## Blockers (deployment)
+
+1. DB password committed in `appsettings.json` — rotate / move to env or secret store.
+2. `Jwt:Key` not in checked-in config — must be supplied via User Secrets / env or startup fails.
+3. Deploy role must allow `CREATE EXTENSION btree_gist` and EXCLUDE constraint from `BookingActiveOverlapExclusion`.
+
+## Test gaps (non-blocking for FE)
+
+- No single auth → availability → create → list → detail chain test.
+- Authenticated customer create not asserted on owner/employee list responses (guest path is).
+- `CustomerId` ↔ logged-in user not explicitly asserted on create.
+- Expiration job then availability not chained (seeded Expired + create path are covered).
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --verbosity minimal
+dotnet build BookingSaas-backend.csproj -c Release
+```
+
+Result: **141 total — 141 passed** (Docker / Testcontainers). Release: **0 errors**, NU1903 warning.
+
+Booking-related counts: Creation 9, Availability 12, Concurrency 10, Expiration 11, Status 14, List 22, Detail 9, Mine 18 (+ EmployeeServices 6, Auth 6, Business 24).
 
 ---
 
@@ -426,5 +512,6 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 
 # Next
 
-1. Apply pending booking migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion` — only on request).
-2. Later booking phases: customer self-cancel / reschedule — only when specified.
+1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides` — only on request).
+2. Subsequent EmployeeService phases: PUT overrides endpoint, then availability/booking resolution of effective price/duration.
+3. Later booking phases: customer self-cancel / reschedule — only when specified.

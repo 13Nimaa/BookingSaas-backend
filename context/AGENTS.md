@@ -12,6 +12,12 @@ Read the following files in order before implementing or making any architectura
 6. `context/current-issues.md` — known bugs, debt, and findings not silently fixed
 7. `context/PROJECT_INVENTORY.md` — wired vs missing APIs, entities, and BE gaps
 
+Frontend contracts (for Next.js / API consumers):
+
+- `context/Booking-MVP-frontend.md` — specs 01–11 booking MVP implementation guide
+- `context/Customer-API-frontend.md` — customer CRM detail
+- `context/WorkingHour-API-frontend.md` — date-based working hours
+
 When a task points at a feature spec under `context/feature-spec/`, read that spec and follow its scope rules exactly.
 
 Update `context/progress-tracker.md` after each meaningful implementation change.
