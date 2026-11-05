@@ -1,9 +1,33 @@
 # Backend progress
 
-**Last updated:** 2026-11-04  
-**Current task:** Business public list — search / city filter / sort / pagination — **Complete**  
-**Prior:** Phase 5 — Integration & Regression Testing (employee-specific price/duration) — complete  
+**Last updated:** 2026-11-05  
+**Current task:** Public business detail — employees / assignments / hours — **Complete**  
+**Prior:** Business public list — search / city filter / sort / pagination — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Public business detail — employees, assignments, working hours
+
+| Area | Status |
+|------|--------|
+| `GET /api/Business/{id}` returns `BusinessDetailsDto` | Done |
+| Nested public employees (`id`, `fullName`, `avatarUrl`; no phone/userId) | Done |
+| Nested employee↔service effective price/duration | Done |
+| Nested working hours (default business-local today…+30d; `hoursFrom`/`hoursTo`) | Done |
+| Owner-only employee/ES/working-hour manage APIs unchanged | Done |
+| Integration tests | Done |
+
+## Files
+
+| Path | Role |
+|------|------|
+| `Application/Dtos/Business/BusinessDetailsDto.cs` | Public detail response |
+| `Application/Dtos/Employee/PublicEmployeeDto.cs` | Public employee + service DTOs |
+| `Controllers/BusinessController.cs` | Enriched `GetById` |
+| `tests/.../BussinessTests.cs` | Public detail coverage |
+| `context/Business-Detail-API-frontend.md` | FE implementation guide |
+| `context/Business-List-API-frontend.md` | Points to detail guide |
 
 ---
 

@@ -97,7 +97,7 @@ async function listBusinesses(query: BusinessListQuery = {}) {
 3. City filter: exact match UI (dropdown / chips). Free-text city still works via `search`.
 4. Pagination: use `hasNextPage` / `hasPreviousPage` or `totalPages`; keep `pageSize` ≤ 100.
 5. Empty state: `items.length === 0` with `totalCount === 0` is valid (not an error).
-6. Detail page unchanged: `GET /api/Business/{id}` → single `BusinessDto`.
+6. Detail page: full contract in **`context/Business-Detail-API-frontend.md`** (`GET /api/Business/{id}` → `BusinessDetailsDto`).
 
 ---
 
@@ -105,5 +105,7 @@ async function listBusinesses(query: BusinessListQuery = {}) {
 
 | Topic | Doc |
 |-------|-----|
+| Public business detail (staff / pricing / hours) | `context/Business-Detail-API-frontend.md` |
 | Booking / employee-service contracts | `context/Booking-MVP-frontend.md` |
+| Working hours (owner/employee manage) | `context/WorkingHour-API-frontend.md` |
 | Backend inventory | `context/PROJECT_INVENTORY.md` |

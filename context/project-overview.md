@@ -18,7 +18,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 1. User registers / logs in via Auth API.
 2. User optionally upgrades to BusinessOwner via `POST /api/Business/register`.
 3. Owner manages business, employees, services, employee↔service assignments, working hours, and CRM customers.
-4. Public callers list/browse businesses.
+4. Public callers list/browse businesses; detail includes public-safe employees, assignments (effective price/duration), and upcoming working hours.
 5. Customers/guests can query free slots via `GET /api/bookings/availability` and create Pending bookings via `POST /api/bookings` and `POST /api/bookings/guest` (availability is informational; create enforces no-overlap for Pending/Confirmed via Postgres exclusion — migration not applied outside tests). Owners can confirm/cancel/complete via `PATCH /api/bookings/{id}/status`. Owners and employees can list/filter bookings via `GET /api/bookings` and retrieve a single booking via `GET /api/bookings/{id}`. Authenticated customers can view their own booking history via `GET /api/bookings/mine` (scoped by `Customer.UserId`, including across multiple businesses). Pending bookings older than `Booking:PendingExpirationMinutes` (default 30) are auto-expired by a hosted background service.
 
 ## Features
@@ -34,7 +34,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 
 ### Business
 
-- Public list/detail; owner “mine”; update; image upload/delete.
+- Public list; public detail with nested employees / assignments / hours; owner “mine”; update; image upload/delete.
 - Self-register upgrades role to `BusinessOwner` (one business per owner).
 
 ### Employees & working hours

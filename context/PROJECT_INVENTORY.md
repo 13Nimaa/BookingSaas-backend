@@ -251,7 +251,7 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
 |--------|------|------|---------|----------|
 | POST | `/` | `Admin` | `CreateBusinessDto` | `201` `BusinessDto` |
 | GET | `/` | Public | query: `search`, `city`, `sortBy`, `sortOrder`, `page`, `pageSize` | `200` `PagedResult<BusinessDto>` |
-| GET | `/{id}` | Public | — | `BusinessDto` |
+| GET | `/{id}` | Public | optional `hoursFrom`, `hoursTo` | `BusinessDetailsDto` |
 | GET | `/mine` | Authorize | — | `MyBusinessResponse` |
 | PUT | `/{id}` | `BusinessOwner` + must own | `CreateBusinessDto` (note: not `UpdateBusinessDto`) | `{ message, data: BusinessDto }` |
 | DELETE | `/{id}` | `Admin` | — | `204` |
@@ -283,6 +283,48 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
   "ownerId": "string"
 }
 ```
+
+**BusinessDetailsDto** (`GET /{id}`) — same business fields plus nested public employees:
+```json
+{
+  "id": 1,
+  "name": "string",
+  "city": "string",
+  "address": "string",
+  "description": "string|null",
+  "profileImageUrl": "string|null",
+  "ownerId": "string",
+  "employees": [
+    {
+      "id": 1,
+      "fullName": "string",
+      "avatarUrl": "string|null",
+      "services": [
+        {
+          "id": 1,
+          "title": "string",
+          "effectivePrice": 150000,
+          "effectiveDurationMinutes": 45
+        }
+      ],
+      "workingHours": [
+        {
+          "id": 1,
+          "employeeId": 1,
+          "date": "2026-11-06",
+          "dayOfWeek": 5,
+          "startTime": "09:00:00",
+          "endTime": "17:00:00"
+        }
+      ]
+    }
+  ]
+}
+```
+- No `phoneNumber` / `userId` on public employees.
+- `services` = assigned employee↔service rows with effective pricing (`override ?? service default`).
+- `workingHours` window: default business-local **today … +30 days**; query `hoursFrom` / `hoursTo` (Gregorian `yyyy-MM-dd`); max span **90 days**; inverted or oversized window → `400`.
+- Owner manage APIs (`GET .../employees`, `GET .../services`, working-hours CRUD) stay auth-gated and can still return phone / full override fields.
 
 **MyBusinessResponse**
 ```json
@@ -321,7 +363,8 @@ User must already exist and be in role `Customer`. Cannot already be an employee
 }
 ```
 
-Missing: get by id, update, re-assign, employee self-view, public list for booking UI.
+Missing: get by id, update, re-assign, employee self-view.  
+Public browse uses nested employees on `GET /api/Business/{id}` (`PublicEmployeeDto`) — not this owner list.
 
 ---
 
@@ -354,7 +397,8 @@ Missing: none for core CRUD (update/delete/get by id exist).
 
 ### 3.5b Employee ↔ Service — `api/employees/{employeeId}/services`
 
-All: **`BusinessOwner`** + must own the employee's business (derived from DB; client does not send BusinessId).
+All manage routes: **`BusinessOwner`** + must own the employee's business (derived from DB; client does not send BusinessId).  
+Public eligible-staff + effective pricing: nested under `GET /api/Business/{id}` (`PublicEmployeeServiceDto`) — not this owner route.
 
 | Method | Path | Request | Response |
 |--------|------|---------|----------|
@@ -424,7 +468,7 @@ Auth: **`Employee` or `BusinessOwner`**. Access if caller is that employee **or*
 }
 ```
 Validates end > start; rejects overlapping ranges on the same date (`409`).  
-**Not public** — booking UI cannot currently read hours without auth.
+Public browse reads upcoming hours via nested `workingHours` on `GET /api/Business/{id}` (not this manage route).
 
 ---
 
@@ -716,7 +760,7 @@ Password policy: min length 6, non-alphanumeric not required.
 | JWT Key absent from committed config | Must be in User Secrets locally |
 | Cloudinary empty in repo | Must configure before image endpoints work |
 | Refresh returns raw token in body **and** cookie | Frontend must pick one strategy |
-| No public working-hours/employees for booking flow | Blocks public booking UI |
+| ~~No public working-hours/employees for booking flow~~ | Resolved — nested on `GET /api/Business/{id}` (`BusinessDetailsDto`) |
 
 ---
 

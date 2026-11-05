@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Application.Common;
 using Application.Dtos.Business;
+using Application.Dtos.Employee;
+using Application.Dtos.WorkingHour;
 using Application.Interfaces;
 using BookingSaas_backend.Application.Dtos.AuthDtos;
 using BookingSaas_backend.Application.Interfaces;
@@ -146,26 +148,172 @@ public class BusinessController : ControllerBase
             items, query.Page, query.PageSize, totalCount, totalPages));
     }
 
+    /// <summary>
+    /// Public business detail. Nested employees omit phone/userId.
+    /// Working hours default to business-local today … +30 days; override with hoursFrom/hoursTo.
+    /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<BusinessDto>> GetById(int id)
+    public async Task<ActionResult<BusinessDetailsDto>> GetById(
+        int id,
+        [FromQuery] DateOnly? hoursFrom = null,
+        [FromQuery] DateOnly? hoursTo = null)
     {
         var business = await _dbContext.Businesses
+            .AsNoTracking()
             .Where(b => b.Id == id)
-            .Select(b => new BusinessDto(
+            .Select(b => new
+            {
                 b.Id,
                 b.Name,
                 b.City,
                 b.Address,
                 b.Description,
                 b.ProfileImageUrl,
-                b.OwnerId
-            ))
+                b.OwnerId,
+                b.TimeZoneId
+            })
             .FirstOrDefaultAsync();
 
         if (business is null)
             return NotFound();
 
-        return Ok(business);
+        if (!TryResolveHoursWindow(
+                business.TimeZoneId,
+                hoursFrom,
+                hoursTo,
+                out var from,
+                out var to,
+                out var windowError))
+            return BadRequest(windowError);
+
+        var employeeRows = await _dbContext.Employees
+            .AsNoTracking()
+            .Where(e => e.BusinessId == id)
+            .OrderBy(e => e.Id)
+            .Select(e => new
+            {
+                e.Id,
+                e.User.FullName,
+                AvatarUrl = e.User.ProfileImageUrl
+            })
+            .ToListAsync();
+
+        var employeeIds = employeeRows.Select(e => e.Id).ToList();
+
+        var serviceRows = employeeIds.Count == 0
+            ? []
+            : await _dbContext.EmployeeServices
+                .AsNoTracking()
+                .Where(es =>
+                    employeeIds.Contains(es.EmployeesId) &&
+                    es.Service.BusinessId == id)
+                .OrderBy(es => es.ServicesId)
+                .Select(es => new
+                {
+                    EmployeeId = es.EmployeesId,
+                    Service = new PublicEmployeeServiceDto(
+                        es.Service.Id,
+                        es.Service.Title,
+                        es.PriceOverride ?? es.Service.Price,
+                        es.DurationMinutesOverride ?? es.Service.DurationMinutes)
+                })
+                .ToListAsync();
+
+        var hourRows = employeeIds.Count == 0
+            ? []
+            : await _dbContext.WorkingHours
+                .AsNoTracking()
+                .Where(w =>
+                    employeeIds.Contains(w.EmployeeId) &&
+                    w.Date >= from &&
+                    w.Date <= to)
+                .OrderBy(w => w.Date)
+                .ThenBy(w => w.StartTime)
+                .Select(w => new WorkingHourDto(
+                    w.Id,
+                    w.EmployeeId,
+                    w.Date,
+                    w.DayOfWeek,
+                    w.StartTime,
+                    w.EndTime))
+                .ToListAsync();
+
+        var servicesByEmployee = serviceRows
+            .GroupBy(s => s.EmployeeId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<PublicEmployeeServiceDto>)g.Select(x => x.Service).ToList());
+
+        var hoursByEmployee = hourRows
+            .GroupBy(h => h.EmployeeId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<WorkingHourDto>)g.ToList());
+
+        var employees = employeeRows
+            .Select(e => new PublicEmployeeDto(
+                e.Id,
+                e.FullName,
+                e.AvatarUrl,
+                servicesByEmployee.GetValueOrDefault(e.Id, Array.Empty<PublicEmployeeServiceDto>()),
+                hoursByEmployee.GetValueOrDefault(e.Id, Array.Empty<WorkingHourDto>())))
+            .ToList();
+
+        return Ok(new BusinessDetailsDto(
+            business.Id,
+            business.Name,
+            business.City,
+            business.Address,
+            business.Description,
+            business.ProfileImageUrl,
+            business.OwnerId,
+            employees));
+    }
+
+    private const int DefaultHoursWindowDays = 30;
+    private const int MaxHoursWindowDays = 90;
+
+    private static bool TryResolveHoursWindow(
+        string timeZoneId,
+        DateOnly? hoursFrom,
+        DateOnly? hoursTo,
+        out DateOnly from,
+        out DateOnly to,
+        out string? error)
+    {
+        from = default;
+        to = default;
+        error = null;
+
+        TimeZoneInfo timeZone;
+        try
+        {
+            timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            timeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran");
+        }
+
+        var today = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
+
+        from = hoursFrom ?? today;
+        to = hoursTo ?? from.AddDays(DefaultHoursWindowDays);
+
+        if (to < from)
+        {
+            error = "hoursTo must be on or after hoursFrom.";
+            return false;
+        }
+
+        if (to.DayNumber - from.DayNumber > MaxHoursWindowDays)
+        {
+            error = $"Working-hours window cannot exceed {MaxHoursWindowDays} days.";
+            return false;
+        }
+
+        return true;
     }
 
     [Authorize]

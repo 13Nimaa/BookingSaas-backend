@@ -194,9 +194,79 @@ public sealed class BussinessTests : IAsyncLifetime
 
         var detailResponse = await _client.GetAsync($"/api/Business/{owner.BusinessId}");
         Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
-        var detail = await ReadAsync<BusinessDto>(detailResponse);
+        var detail = await ReadAsync<BusinessDetailsDto>(detailResponse);
         Assert.Equal(owner.BusinessId, detail.Id);
         Assert.Equal("Public Shop", detail.Name);
+        Assert.Empty(detail.Employees);
+    }
+
+    [Fact]
+    public async Task Public_detail_includes_employees_services_and_hours_without_phone()
+    {
+        var owner = await CreateOwnerWithBusinessAsync("09121000048", "Detail Shop");
+        var employee = await CreateEmployeeAsync(
+            owner.AccessToken,
+            owner.BusinessId,
+            "09121000049",
+            fullName: "Ada Stylist");
+        var service = await CreateServiceAsync(owner.AccessToken, owner.BusinessId, "Haircut");
+
+        var assign = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/employees/{employee.Id}/services",
+            owner.AccessToken,
+            new { serviceId = service.Id, priceOverride = 150000m, durationMinutesOverride = 45 });
+        Assert.Equal(HttpStatusCode.Created, assign.StatusCode);
+
+        var hoursDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var hours = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/business/{owner.BusinessId}/employees/{employee.Id}/working-hours",
+            owner.AccessToken,
+            new { date = hoursDate.ToString("yyyy-MM-dd"), startTime = "09:00:00", endTime = "17:00:00" });
+        Assert.Equal(HttpStatusCode.Created, hours.StatusCode);
+
+        var detailResponse = await _client.GetAsync($"/api/Business/{owner.BusinessId}");
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+
+        var raw = await detailResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("09121000049", raw);
+        Assert.DoesNotContain("phoneNumber", raw, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("userId", raw, StringComparison.OrdinalIgnoreCase);
+
+        var detail = await ReadAsync<BusinessDetailsDto>(detailResponse);
+        Assert.Single(detail.Employees);
+
+        var publicEmployee = detail.Employees[0];
+        Assert.Equal(employee.Id, publicEmployee.Id);
+        Assert.Equal("Ada Stylist", publicEmployee.FullName);
+        Assert.Null(publicEmployee.AvatarUrl);
+
+        Assert.Single(publicEmployee.Services);
+        Assert.Equal(service.Id, publicEmployee.Services[0].Id);
+        Assert.Equal("Haircut", publicEmployee.Services[0].Title);
+        Assert.Equal(150000m, publicEmployee.Services[0].EffectivePrice);
+        Assert.Equal(45, publicEmployee.Services[0].EffectiveDurationMinutes);
+
+        Assert.Contains(publicEmployee.WorkingHours, w =>
+            w.EmployeeId == employee.Id &&
+            w.Date == hoursDate &&
+            w.StartTime == new TimeOnly(9, 0) &&
+            w.EndTime == new TimeOnly(17, 0));
+    }
+
+    [Fact]
+    public async Task Public_detail_rejects_invalid_hours_window()
+    {
+        var owner = await CreateOwnerWithBusinessAsync("09121000050", "Window Shop");
+
+        var inverted = await _client.GetAsync(
+            $"/api/Business/{owner.BusinessId}?hoursFrom=2026-12-10&hoursTo=2026-12-01");
+        Assert.Equal(HttpStatusCode.BadRequest, inverted.StatusCode);
+
+        var tooWide = await _client.GetAsync(
+            $"/api/Business/{owner.BusinessId}?hoursFrom=2026-01-01&hoursTo=2026-06-01");
+        Assert.Equal(HttpStatusCode.BadRequest, tooWide.StatusCode);
     }
 
     [Fact]
@@ -544,11 +614,13 @@ public sealed class BussinessTests : IAsyncLifetime
             description = "Test description"
         };
 
-    private async Task<AuthResponse> RegisterCustomerAsync(string phoneNumber)
+    private async Task<AuthResponse> RegisterCustomerAsync(
+        string phoneNumber,
+        string? fullName = null)
     {
         var response = await _client.PostAsJsonAsync("/api/Auth/register", new
         {
-            name = $"User {phoneNumber}",
+            name = fullName ?? $"User {phoneNumber}",
             phoneNumber,
             password = "Password1",
             confirmPassword = "Password1"
@@ -670,6 +742,45 @@ public sealed class BussinessTests : IAsyncLifetime
         string? Description,
         string? ProfileImageUrl,
         string OwnerId);
+    private sealed record BusinessDetailsDto(
+        int Id,
+        string Name,
+        string City,
+        string Address,
+        string? Description,
+        string? ProfileImageUrl,
+        string OwnerId,
+        IReadOnlyList<PublicEmployeeDto> Employees);
+    private sealed record PublicEmployeeDto(
+        int Id,
+        string FullName,
+        string? AvatarUrl,
+        IReadOnlyList<PublicEmployeeServiceDto> Services,
+        IReadOnlyList<WorkingHourDto> WorkingHours);
+    private sealed record PublicEmployeeServiceDto(
+        int Id,
+        string Title,
+        decimal EffectivePrice,
+        int EffectiveDurationMinutes);
+    private sealed record WorkingHourDto(
+        int Id,
+        int EmployeeId,
+        DateOnly Date,
+        DayOfWeek DayOfWeek,
+        TimeOnly StartTime,
+        TimeOnly EndTime);
+    private sealed record EmployeeDto(
+        int Id,
+        string UserId,
+        string FullName,
+        string PhoneNumber,
+        int BusinessId);
+    private sealed record ServiceDto(
+        int Id,
+        string Title,
+        decimal Price,
+        int DurationMinutes,
+        int BusinessId);
     private sealed record PagedResult<T>(
         IReadOnlyList<T> Items,
         int Page,
@@ -682,4 +793,42 @@ public sealed class BussinessTests : IAsyncLifetime
     private sealed record UpdateBusinessResponse(string Message, BusinessDto Data);
     private sealed record OwnerContext(string UserId, string AccessToken, int BusinessId);
     private sealed record AdminContext(string UserId, string AccessToken);
+
+    private async Task<EmployeeDto> CreateEmployeeAsync(
+        string ownerToken,
+        int businessId,
+        string employeePhone,
+        string? fullName = null)
+    {
+        await RegisterCustomerAsync(employeePhone, fullName);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/business/{businessId}/employees",
+            ownerToken,
+            new { phoneNumber = employeePhone });
+
+        response.EnsureSuccessStatusCode();
+        return await ReadAsync<EmployeeDto>(response);
+    }
+
+    private async Task<ServiceDto> CreateServiceAsync(
+        string ownerToken,
+        int businessId,
+        string title)
+    {
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            $"/api/business/{businessId}/services",
+            ownerToken,
+            new
+            {
+                title,
+                price = 100000m,
+                durationMinutes = 30
+            });
+
+        response.EnsureSuccessStatusCode();
+        return await ReadAsync<ServiceDto>(response);
+    }
 }

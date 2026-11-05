@@ -11,6 +11,7 @@ Related docs (do not duplicate):
 | Customer CRM (spec 01 detail) | `context/Customer-API-frontend.md` |
 | Working hours (date-based) | `context/WorkingHour-API-frontend.md` |
 | Business public list (search / city / sort / page) | `context/Business-List-API-frontend.md` |
+| Business public detail (staff / pricing / hours) | `context/Business-Detail-API-frontend.md` |
 | Backend phase status | `context/progress-tracker.md` |
 | Known debt / deploy blockers | `context/current-issues.md` |
 
