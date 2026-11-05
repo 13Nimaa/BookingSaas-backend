@@ -189,14 +189,88 @@ public sealed class BussinessTests : IAsyncLifetime
 
         var listResponse = await _client.GetAsync("/api/Business");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var list = await ReadAsync<List<BusinessDto>>(listResponse);
-        Assert.Contains(list, b => b.Name == "Public Shop" && b.OwnerId == owner.UserId);
+        var page = await ReadAsync<PagedResult<BusinessDto>>(listResponse);
+        Assert.Contains(page.Items, b => b.Name == "Public Shop" && b.OwnerId == owner.UserId);
 
         var detailResponse = await _client.GetAsync($"/api/Business/{owner.BusinessId}");
         Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
         var detail = await ReadAsync<BusinessDto>(detailResponse);
         Assert.Equal(owner.BusinessId, detail.Id);
         Assert.Equal("Public Shop", detail.Name);
+    }
+
+    [Fact]
+    public async Task Public_list_filters_by_city()
+    {
+        await CreateOwnerWithBusinessAsync("09121000040", "Tehran Salon", "Tehran");
+        await CreateOwnerWithBusinessAsync("09121000041", "Shiraz Salon", "Shiraz");
+
+        var response = await _client.GetAsync("/api/Business?city=shiraz");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await ReadAsync<PagedResult<BusinessDto>>(response);
+
+        Assert.NotEmpty(page.Items);
+        Assert.All(page.Items, b => Assert.Equal("Shiraz", b.City, ignoreCase: true));
+        Assert.Contains(page.Items, b => b.Name == "Shiraz Salon");
+        Assert.DoesNotContain(page.Items, b => b.Name == "Tehran Salon");
+    }
+
+    [Fact]
+    public async Task Public_list_searches_by_name()
+    {
+        await CreateOwnerWithBusinessAsync("09121000042", "Alpha Clinic", "Tehran");
+        await CreateOwnerWithBusinessAsync("09121000043", "Beta Spa", "Tehran");
+
+        var response = await _client.GetAsync("/api/Business?search=alpha");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await ReadAsync<PagedResult<BusinessDto>>(response);
+
+        Assert.Contains(page.Items, b => b.Name == "Alpha Clinic");
+        Assert.DoesNotContain(page.Items, b => b.Name == "Beta Spa");
+    }
+
+    [Fact]
+    public async Task Public_list_sorts_by_name_desc()
+    {
+        await CreateOwnerWithBusinessAsync("09121000044", "AAA Sort Shop", "Tehran");
+        await CreateOwnerWithBusinessAsync("09121000045", "ZZZ Sort Shop", "Tehran");
+
+        var response = await _client.GetAsync("/api/Business?sortBy=name&sortOrder=desc&pageSize=100");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await ReadAsync<PagedResult<BusinessDto>>(response);
+
+        var aaa = page.Items.Single(b => b.Name == "AAA Sort Shop");
+        var zzz = page.Items.Single(b => b.Name == "ZZZ Sort Shop");
+        Assert.True(page.Items.ToList().IndexOf(zzz) < page.Items.ToList().IndexOf(aaa));
+    }
+
+    [Fact]
+    public async Task Public_list_paginates()
+    {
+        await CreateOwnerWithBusinessAsync("09121000046", "Page One Biz", "Tehran");
+        await CreateOwnerWithBusinessAsync("09121000047", "Page Two Biz", "Tehran");
+
+        var page1 = await ReadAsync<PagedResult<BusinessDto>>(
+            await _client.GetAsync("/api/Business?sortBy=name&sortOrder=asc&page=1&pageSize=1"));
+        var page2 = await ReadAsync<PagedResult<BusinessDto>>(
+            await _client.GetAsync("/api/Business?sortBy=name&sortOrder=asc&page=2&pageSize=1"));
+
+        Assert.Equal(1, page1.PageSize);
+        Assert.Single(page1.Items);
+        Assert.Single(page2.Items);
+        Assert.NotEqual(page1.Items[0].Id, page2.Items[0].Id);
+        Assert.True(page1.TotalCount >= 2);
+        Assert.True(page1.HasNextPage);
+    }
+
+    [Fact]
+    public async Task Public_list_rejects_invalid_sort_or_page()
+    {
+        var badSort = await _client.GetAsync("/api/Business?sortBy=ownerId");
+        Assert.Equal(HttpStatusCode.BadRequest, badSort.StatusCode);
+
+        var badPage = await _client.GetAsync("/api/Business?page=0");
+        Assert.Equal(HttpStatusCode.BadRequest, badPage.StatusCode);
     }
 
     [Fact]
@@ -486,7 +560,8 @@ public sealed class BussinessTests : IAsyncLifetime
 
     private async Task<HttpResponseMessage> RegisterBusinessAsync(
         string accessToken,
-        string name)
+        string name,
+        string city = "Tehran")
     {
         return await SendAuthorizedAsync(
             HttpMethod.Post,
@@ -495,7 +570,7 @@ public sealed class BussinessTests : IAsyncLifetime
             new
             {
                 name,
-                city = "Tehran",
+                city,
                 address = "Owner Address",
                 description = "Owner business"
             });
@@ -503,10 +578,11 @@ public sealed class BussinessTests : IAsyncLifetime
 
     private async Task<OwnerContext> CreateOwnerWithBusinessAsync(
         string phoneNumber,
-        string businessName)
+        string businessName,
+        string city = "Tehran")
     {
         var customer = await RegisterCustomerAsync(phoneNumber);
-        var registerResponse = await RegisterBusinessAsync(customer.AccessToken, businessName);
+        var registerResponse = await RegisterBusinessAsync(customer.AccessToken, businessName, city);
         registerResponse.EnsureSuccessStatusCode();
         var auth = await ReadAsync<AuthResponse>(registerResponse);
         var mine = await GetMineAsync(auth.AccessToken);
@@ -594,6 +670,14 @@ public sealed class BussinessTests : IAsyncLifetime
         string? Description,
         string? ProfileImageUrl,
         string OwnerId);
+    private sealed record PagedResult<T>(
+        IReadOnlyList<T> Items,
+        int Page,
+        int PageSize,
+        int TotalCount,
+        int TotalPages,
+        bool HasPreviousPage,
+        bool HasNextPage);
     private sealed record MyBusinessResponse(bool HasBusiness, BusinessDto? Business);
     private sealed record UpdateBusinessResponse(string Message, BusinessDto Data);
     private sealed record OwnerContext(string UserId, string AccessToken, int BusinessId);

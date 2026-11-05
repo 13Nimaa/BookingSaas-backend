@@ -17,6 +17,7 @@ Frontend contracts (for Next.js / API consumers):
 - `context/Booking-MVP-frontend.md` — specs 01–11 booking MVP implementation guide
 - `context/Customer-API-frontend.md` — customer CRM detail
 - `context/WorkingHour-API-frontend.md` — date-based working hours
+- `context/Business-List-API-frontend.md` — public business list search / city / sort / page
 
 When a task points at a feature spec under `context/feature-spec/`, read that spec and follow its scope rules exactly.
 

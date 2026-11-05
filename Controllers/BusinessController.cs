@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.Common;
 using Application.Dtos.Business;
 using Application.Interfaces;
 using BookingSaas_backend.Application.Dtos.AuthDtos;
@@ -87,9 +88,50 @@ public class BusinessController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<BusinessDto>>> GetAll()
+    public async Task<ActionResult<PagedResult<BusinessDto>>> GetAll(
+        [FromQuery] BusinessListQuery query)
     {
-        var businesses = await _dbContext.Businesses
+        var businesses = _dbContext.Businesses.AsNoTracking();
+
+        var city = query.City?.Trim();
+        if (!string.IsNullOrEmpty(city))
+            businesses = businesses.Where(b => EF.Functions.ILike(b.City, city));
+
+        var search = query.Search?.Trim();
+        if (!string.IsNullOrEmpty(search))
+        {
+            var pattern = $"%{search}%";
+            businesses = businesses.Where(b =>
+                EF.Functions.ILike(b.Name, pattern) ||
+                EF.Functions.ILike(b.City, pattern) ||
+                EF.Functions.ILike(b.Address, pattern) ||
+                (b.Description != null && EF.Functions.ILike(b.Description, pattern)));
+        }
+
+        var totalCount = await businesses.CountAsync();
+        var totalPages = totalCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalCount / (double)query.PageSize);
+
+        var sortBy = string.IsNullOrWhiteSpace(query.SortBy)
+            ? "name"
+            : query.SortBy.Trim().ToLowerInvariant();
+        var sortAsc = !string.Equals(
+            query.SortOrder?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
+
+        IQueryable<Business> sorted = (sortBy, sortAsc) switch
+        {
+            ("city", true) => businesses.OrderBy(b => b.City).ThenBy(b => b.Id),
+            ("city", false) => businesses.OrderByDescending(b => b.City).ThenByDescending(b => b.Id),
+            ("id", true) => businesses.OrderBy(b => b.Id),
+            ("id", false) => businesses.OrderByDescending(b => b.Id),
+            ("name", false) => businesses.OrderByDescending(b => b.Name).ThenByDescending(b => b.Id),
+            _ => businesses.OrderBy(b => b.Name).ThenBy(b => b.Id),
+        };
+
+        var items = await sorted
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .Select(b => new BusinessDto(
                 b.Id,
                 b.Name,
@@ -97,11 +139,11 @@ public class BusinessController : ControllerBase
                 b.Address,
                 b.Description,
                 b.ProfileImageUrl,
-                b.OwnerId
-            ))
+                b.OwnerId))
             .ToListAsync();
 
-        return Ok(businesses);
+        return Ok(new PagedResult<BusinessDto>(
+            items, query.Page, query.PageSize, totalCount, totalPages));
     }
 
     [HttpGet("{id}")]

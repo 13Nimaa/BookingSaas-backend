@@ -1,9 +1,31 @@
 # Backend progress
 
-**Last updated:** 2026-11-02  
-**Current task:** Phase 5 — Integration & Regression Testing (employee-specific price/duration) — **Complete**  
-**Prior:** Phase 4 — Booking Integration with Employee-Specific Pricing and Duration — complete  
+**Last updated:** 2026-11-04  
+**Current task:** Business public list — search / city filter / sort / pagination — **Complete**  
+**Prior:** Phase 5 — Integration & Regression Testing (employee-specific price/duration) — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Business public list — search, filter, sort, pagination
+
+| Area | Status |
+|------|--------|
+| `GET /api/Business` returns `PagedResult<BusinessDto>` | Done |
+| `search` on name/city/address/description | Done |
+| `city` exact (case-insensitive) filter | Done |
+| `sortBy` name\|city\|id + `sortOrder` | Done |
+| FluentValidation on query | Done |
+| Integration tests | Done |
+
+## Files
+
+| Path | Role |
+|------|------|
+| `Application/Dtos/Business/BusinessListQuery.cs` | Query params |
+| `Application/Validators/Business/BusinessListQueryValidator.cs` | Validation |
+| `Controllers/BusinessController.cs` | GetAll |
+| `tests/.../BussinessTests.cs` | Coverage |
 
 ---
 

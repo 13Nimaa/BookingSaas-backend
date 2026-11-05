@@ -250,7 +250,7 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
 | Method | Path | Auth | Request | Response |
 |--------|------|------|---------|----------|
 | POST | `/` | `Admin` | `CreateBusinessDto` | `201` `BusinessDto` |
-| GET | `/` | Public | — | `BusinessDto[]` |
+| GET | `/` | Public | query: `search`, `city`, `sortBy`, `sortOrder`, `page`, `pageSize` | `200` `PagedResult<BusinessDto>` |
 | GET | `/{id}` | Public | — | `BusinessDto` |
 | GET | `/mine` | Authorize | — | `MyBusinessResponse` |
 | PUT | `/{id}` | `BusinessOwner` + must own | `CreateBusinessDto` (note: not `UpdateBusinessDto`) | `{ message, data: BusinessDto }` |
@@ -263,6 +263,13 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
 ```json
 { "name": "string", "city": "string", "address": "string", "description": "string|null" }
 ```
+
+**Business list query (`GET /api/Business`)**
+- `search` — case-insensitive match on name / city / address / description
+- `city` — case-insensitive exact city filter (uses City index)
+- `sortBy` — `name` (default) | `city` | `id`
+- `sortOrder` — `asc` (default) | `desc`
+- `page` default `1`; `pageSize` default `20` (max 100)
 
 **BusinessDto**
 ```json
@@ -677,7 +684,7 @@ Password policy: min length 6, non-alphanumeric not required.
 12. Use `UpdateBusinessDto` consistently (or delete unused DTO).
 
 ### P2 — Product polish
-13. Business search/filter by city (index already on `City`).
+13. ~~Business search/filter by city~~ Done (`GET /api/Business` with `search` / `city` / sort / paging).
 14. Notes on booking create.
 15. Seed roles (`Customer`, `BusinessOwner`, `Employee`, `Admin`) on startup.
 16. Remove or sync unused `UserRole` enum on `ApplicationUser`.
