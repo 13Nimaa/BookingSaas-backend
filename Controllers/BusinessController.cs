@@ -39,12 +39,14 @@ public class BusinessController : ControllerBase
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly ITokenService _tokenService;
     private readonly IImageUploadService _imageUploadService;
+    private readonly IDashboardService _dashboardService;
     private readonly ILogger<BusinessController> _logger;
     public BusinessController(AppDbContext dbContext,
      UserManager<ApplicationUser> userManager,
     RoleManager<IdentityRole> roleManager,
         ITokenService tokenService,
         IImageUploadService imageUploadService,
+        IDashboardService dashboardService,
         ILogger<BusinessController> logger)
     {
         _dbContext = dbContext;
@@ -52,6 +54,7 @@ public class BusinessController : ControllerBase
         _roleManager = roleManager;
         _tokenService = tokenService;
         _imageUploadService = imageUploadService;
+        _dashboardService = dashboardService;
         _logger = logger;
 
     }
@@ -311,6 +314,33 @@ public class BusinessController : ControllerBase
             Business: entity is null ? null : ToBusinessDto(entity));
 
         return Ok(response);
+    }
+
+    [Authorize(Roles = "BusinessOwner")]
+    [HttpGet("dashboard")]
+    public async Task<ActionResult<BusinessDashboardDto>> GetDashboard(
+        CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        try
+        {
+            var dashboard = await _dashboardService.GetForOwnerAsync(
+                userId,
+                cancellationToken);
+
+            if (dashboard is null)
+                return NotFound("کسب‌وکار پیدا نشد.");
+
+            return Ok(dashboard);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
     [Authorize(Roles = "BusinessOwner")]
     [HttpPut("{id}")]
