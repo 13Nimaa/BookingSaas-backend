@@ -8,7 +8,7 @@
 | Auth | Identity + JWT Bearer | Users, roles, tokens |
 | Persistence | EF Core + Npgsql | PostgreSQL mappings & migrations |
 | Validation | FluentValidation | DTO rules (auto-validation) |
-| Media | Cloudinary | Profile / business images |
+| Media | Cloudinary | Profile / business / gallery images |
 | Tests | xUnit + Testcontainers | Integration tests against real Postgres |
 
 ## System Boundaries

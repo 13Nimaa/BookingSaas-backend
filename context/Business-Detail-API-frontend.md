@@ -14,6 +14,7 @@ Related:
 | Topic | Doc |
 |-------|-----|
 | Public list (search / city / page) | `context/Business-List-API-frontend.md` |
+| Business gallery upload / delete | `context/Business-Gallery-API-frontend.md` |
 | Availability / create booking | `context/Booking-MVP-frontend.md` |
 | Owner working-hours manage | `context/WorkingHour-API-frontend.md` |
 
@@ -35,7 +36,7 @@ These used to be owner-only; they are now nested on this public detail response 
 
 | UI need | Field / source |
 |---------|----------------|
-| Business header | `name`, `city`, `address`, `description`, `profileImageUrl` |
+| Business header | `name`, `city`, `address`, `description`, `profileImageUrl`, `businessGallery` |
 | Staff list / picker | `employees[]` → `id`, `fullName`, `avatarUrl` |
 | Who can do a service + price | `employee.services[]` → `id`, `title`, `effectivePrice`, `effectiveDurationMinutes` |
 | Optional “hours” section | `employee.workingHours[]` |
@@ -94,6 +95,11 @@ type PublicEmployeeDto = {
   workingHours: WorkingHourDto[];
 };
 
+type BusinessGalleryImageDto = {
+  url: string;
+  publicId: string; // use with DELETE /api/Business/gallery?publicId=
+};
+
 type BusinessDetailsDto = {
   id: number;
   name: string;
@@ -101,6 +107,7 @@ type BusinessDetailsDto = {
   address: string;
   description: string | null;
   profileImageUrl: string | null;
+  businessGallery: BusinessGalleryImageDto[]; // optional; empty array when none
   ownerId: string;
   employees: PublicEmployeeDto[];
 };
@@ -125,6 +132,9 @@ Privacy: no `phoneNumber`, no `userId` on employees.
   "address": "Valiasr St.",
   "description": "Hair & beauty",
   "profileImageUrl": "https://…/biz.jpg",
+  "businessGallery": [
+    { "url": "https://…/gallery1.jpg", "publicId": "booking-saas/businesses/gallery/…" }
+  ],
   "ownerId": "abc-…",
   "employees": [
     {
@@ -153,6 +163,38 @@ Privacy: no `phoneNumber`, no `userId` on employees.
   ]
 }
 ```
+
+---
+
+## Owner gallery upload (optional)
+
+Create / register / update stay JSON. After create (or on edit), upload gallery images:
+
+| Method | Path | Auth | Body |
+|--------|------|------|------|
+| `POST` | `/api/Business/gallery` | owner | `multipart/form-data` field **`files`** (1–N) |
+| `DELETE` | `/api/Business/gallery?publicId=` | owner | — |
+
+Rules: JPG/PNG/WebP, ≤5 MB each, **max 10** images total. Response includes the full `businessGallery` array.
+
+```ts
+async function uploadGallery(accessToken: string, files: File[]) {
+  const form = new FormData();
+  for (const file of files) form.append("files", file);
+  const res = await fetch(`${API_BASE}/api/Business/gallery`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as {
+    message: string;
+    businessGallery: BusinessGalleryImageDto[];
+  };
+}
+```
+
+Public page: render `business.businessGallery.map(g => g.url)` (empty array = no gallery).
 
 ---
 

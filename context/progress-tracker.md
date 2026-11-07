@@ -1,9 +1,42 @@
 # Backend progress
 
-**Last updated:** 2026-11-05  
-**Current task:** Public business detail — employees / assignments / hours — **Complete**  
-**Prior:** Business public list — search / city filter / sort / pagination — complete  
+**Last updated:** 2026-11-07  
+**Current task:** Business gallery images — **Complete**  
+**Prior:** Public business detail — employees / assignments / hours — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Business gallery (`BusinessGallery`)
+
+| Area | Status |
+|------|--------|
+| `Business.BusinessGallery` jsonb owned collection (`Url` + `PublicId`) | Done |
+| Migration `20261107071441_AddBusinessGallery` (created, **not applied**) | Done |
+| `POST /api/Business/gallery` multi-file append (max 10) | Done |
+| `DELETE /api/Business/gallery?publicId=` | Done |
+| `businessGallery` on `BusinessDto` / `BusinessDetailsDto` / GetById | Done |
+| Create/register/update stay JSON (gallery via dedicated endpoints) | Done |
+| FE docs + inventory updated | Done |
+
+## Files
+
+| Path | Role |
+|------|------|
+| `Domain/Entities/Business.cs` | Gallery list |
+| `Domain/Entities/BusinessGalleryImage.cs` | Url + PublicId |
+| `Infrastructure/Persistence/Configurations/BusinessConfiguration.cs` | `OwnsMany` → `ToJson` |
+| `Application/Dtos/Business/*` | DTO + gallery item |
+| `Controllers/BusinessController.cs` | Upload/delete + mapping |
+| `Migrations/20261107071441_AddBusinessGallery.cs` | jsonb column |
+| `context/Business-Detail-API-frontend.md` | FE gallery field on detail |
+| `context/Business-Gallery-API-frontend.md` | Dedicated FE gallery implement guide |
+
+## Migration apply (on request)
+
+```bash
+dotnet ef database update AddBusinessGallery --project BookingSaas-backend.csproj
+```
 
 ---
 

@@ -34,7 +34,7 @@ BookingSaaS is a multi-tenant booking platform API for Iranian businesses (salon
 
 ### Business
 
-- Public list; public detail with nested employees / assignments / hours; owner “mine”; update; image upload/delete.
+- Public list; public detail with nested employees / assignments / hours / optional gallery; owner “mine”; update; profile image + gallery upload/delete.
 - Self-register upgrades role to `BusinessOwner` (one business per owner).
 
 ### Employees & working hours

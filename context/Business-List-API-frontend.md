@@ -27,6 +27,11 @@ Invalid `sortBy` / `sortOrder` / paging → `400` (FluentValidation / ProblemDet
 ## Types
 
 ```ts
+type BusinessGalleryImageDto = {
+  url: string;
+  publicId: string;
+};
+
 type BusinessDto = {
   id: number;
   name: string;
@@ -34,6 +39,7 @@ type BusinessDto = {
   address: string;
   description: string | null;
   profileImageUrl: string | null;
+  businessGallery: BusinessGalleryImageDto[];
   ownerId: string;
 };
 

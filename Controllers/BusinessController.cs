@@ -20,8 +20,11 @@ namespace BookingSaas_backend.Controllers;
 public class BusinessController : ControllerBase
 {
     private const long MaxImageSize = 5 * 1024 * 1024;
+    private const int MaxGalleryImages = 10;
+    private const long MaxGalleryRequestSize = MaxImageSize * MaxGalleryImages;
 
     private const string BusinessImagesFolder = "booking-saas/businesses";
+    private const string BusinessGalleryFolder = "booking-saas/businesses/gallery";
 
     private static readonly HashSet<string> AllowedContentTypes =
         new(StringComparer.OrdinalIgnoreCase)
@@ -74,19 +77,10 @@ public class BusinessController : ControllerBase
         _dbContext.Businesses.Add(business);
         await _dbContext.SaveChangesAsync();
 
-        var result = new BusinessDto(
-            business.Id,
-            business.Name,
-            business.City,
-            business.Address,
-            business.Description,
-            business.ProfileImageUrl,
-            business.OwnerId);
-
         return CreatedAtAction(
             nameof(GetById),
             new { id = business.Id },
-            result);
+            ToBusinessDto(business));
     }
 
     [HttpGet]
@@ -131,18 +125,12 @@ public class BusinessController : ControllerBase
             _ => businesses.OrderBy(b => b.Name).ThenBy(b => b.Id),
         };
 
-        var items = await sorted
+        var rows = await sorted
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .Select(b => new BusinessDto(
-                b.Id,
-                b.Name,
-                b.City,
-                b.Address,
-                b.Description,
-                b.ProfileImageUrl,
-                b.OwnerId))
             .ToListAsync();
+
+        var items = rows.Select(ToBusinessDto).ToList();
 
         return Ok(new PagedResult<BusinessDto>(
             items, query.Page, query.PageSize, totalCount, totalPages));
@@ -160,19 +148,7 @@ public class BusinessController : ControllerBase
     {
         var business = await _dbContext.Businesses
             .AsNoTracking()
-            .Where(b => b.Id == id)
-            .Select(b => new
-            {
-                b.Id,
-                b.Name,
-                b.City,
-                b.Address,
-                b.Description,
-                b.ProfileImageUrl,
-                b.OwnerId,
-                b.TimeZoneId
-            })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(b => b.Id == id);
 
         if (business is null)
             return NotFound();
@@ -266,6 +242,7 @@ public class BusinessController : ControllerBase
             business.Address,
             business.Description,
             business.ProfileImageUrl,
+            ToGalleryDtos(business.BusinessGallery),
             business.OwnerId,
             employees));
     }
@@ -325,23 +302,13 @@ public class BusinessController : ControllerBase
         if (userId is null)
             return Unauthorized();
 
-        var business = await _dbContext.Businesses
-            .Where(b => b.OwnerId == userId)
-            .Select(b => new BusinessDto(
-                b.Id,
-                b.Name,
-                b.City,
-                b.Address,
-                b.Description,
-                b.ProfileImageUrl,
-                b.OwnerId
-            ))
-            .FirstOrDefaultAsync();
+        var entity = await _dbContext.Businesses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.OwnerId == userId);
 
         var response = new MyBusinessResponse(
-            HasBusiness: business is not null,
-            Business: business
-        );
+            HasBusiness: entity is not null,
+            Business: entity is null ? null : ToBusinessDto(entity));
 
         return Ok(response);
     }
@@ -369,20 +336,10 @@ public class BusinessController : ControllerBase
 
         await _dbContext.SaveChangesAsync();
 
-        var result = new BusinessDto(
-            business.Id,
-            business.Name,
-            business.City,
-            business.Address,
-            business.Description,
-            business.ProfileImageUrl,
-            business.OwnerId
-        );
-
         return Ok(new
         {
             message = "Business updated successfully",
-            data = result
+            data = ToBusinessDto(business)
         });
     }
     [Authorize(Roles = "Admin")]
@@ -517,6 +474,158 @@ public class BusinessController : ControllerBase
             message = "تصویر کسب‌وکار با موفقیت حذف شد."
         });
     }
+
+    /// <summary>
+    /// Append optional gallery images (after create/register or during edit).
+    /// Form field name: <c>files</c>. Max 10 images total per business.
+    /// </summary>
+    [Authorize]
+    [HttpPost("gallery")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxGalleryRequestSize)]
+    public async Task<IActionResult> UploadBusinessGallery(
+        [FromForm] List<IFormFile>? files,
+        CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        if (files is null || files.Count == 0)
+            return BadRequest("لطفاً حداقل یک تصویر انتخاب کنید.");
+
+        var business = await _dbContext.Businesses
+            .FirstOrDefaultAsync(b => b.OwnerId == userId, cancellationToken);
+
+        if (business is null)
+            return NotFound("کسب‌وکار پیدا نشد.");
+
+        var remaining = MaxGalleryImages - business.BusinessGallery.Count;
+        if (remaining <= 0)
+            return BadRequest($"حداکثر {MaxGalleryImages} تصویر در گالری مجاز است.");
+
+        if (files.Count > remaining)
+            return BadRequest(
+                $"فقط {remaining} تصویر دیگر می‌توانید اضافه کنید (حداکثر {MaxGalleryImages}).");
+
+        foreach (var file in files)
+        {
+            if (file is null || file.Length == 0)
+                return BadRequest("لطفاً یک تصویر معتبر انتخاب کنید.");
+
+            if (file.Length > MaxImageSize)
+                return BadRequest("حجم هر تصویر نباید بیشتر از ۵ مگابایت باشد.");
+
+            if (!AllowedContentTypes.Contains(file.ContentType))
+                return BadRequest("فرمت تصویر باید JPG، PNG یا WebP باشد.");
+        }
+
+        var uploaded = new List<BusinessGalleryImage>(files.Count);
+
+        try
+        {
+            foreach (var file in files)
+            {
+                var result = await _imageUploadService.UploadAsync(
+                    file,
+                    BusinessGalleryFolder,
+                    cancellationToken);
+
+                uploaded.Add(new BusinessGalleryImage
+                {
+                    Url = result.Url,
+                    PublicId = result.PublicId
+                });
+            }
+
+            business.BusinessGallery.AddRange(uploaded);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            foreach (var image in uploaded)
+                await TryDeleteUploadedImageAsync(image.PublicId, cancellationToken);
+
+            throw;
+        }
+
+        return Ok(new
+        {
+            message = "تصاویر گالری با موفقیت اضافه شد.",
+            businessGallery = ToGalleryDtos(business.BusinessGallery)
+        });
+    }
+
+    [Authorize]
+    [HttpDelete("gallery")]
+    public async Task<IActionResult> DeleteBusinessGalleryImage(
+        [FromQuery] string publicId,
+        CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(publicId))
+            return BadRequest("شناسه تصویر مشخص نشده است.");
+
+        var business = await _dbContext.Businesses
+            .FirstOrDefaultAsync(b => b.OwnerId == userId, cancellationToken);
+
+        if (business is null)
+            return NotFound("کسب‌وکار پیدا نشد.");
+
+        var image = business.BusinessGallery
+            .FirstOrDefault(g => g.PublicId == publicId);
+
+        if (image is null)
+            return NotFound("تصویر گالری پیدا نشد.");
+
+        business.BusinessGallery.Remove(image);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _imageUploadService.DeleteAsync(publicId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to delete gallery image {PublicId} for business {BusinessId}",
+                publicId,
+                business.Id);
+
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                "تصویر از گالری حذف شد، اما حذف فایل از فضای ذخیره‌سازی ناموفق بود.");
+        }
+
+        return Ok(new
+        {
+            message = "تصویر گالری با موفقیت حذف شد.",
+            businessGallery = ToGalleryDtos(business.BusinessGallery)
+        });
+    }
+
+    private static BusinessDto ToBusinessDto(Business business) =>
+        new(
+            business.Id,
+            business.Name,
+            business.City,
+            business.Address,
+            business.Description,
+            business.ProfileImageUrl,
+            ToGalleryDtos(business.BusinessGallery),
+            business.OwnerId);
+
+    private static IReadOnlyList<BusinessGalleryImageDto> ToGalleryDtos(
+        IEnumerable<BusinessGalleryImage>? gallery) =>
+        (gallery ?? Array.Empty<BusinessGalleryImage>())
+            .Select(g => new BusinessGalleryImageDto(g.Url, g.PublicId))
+            .ToList();
 
     private async Task TryDeleteUploadedImageAsync(
         string publicId,

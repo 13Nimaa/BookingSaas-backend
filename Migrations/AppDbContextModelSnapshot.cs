@@ -651,6 +651,33 @@ namespace BookingSaas_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.OwnsMany("Domain.Entities.BusinessGalleryImage", "BusinessGallery", b1 =>
+                        {
+                            b1.Property<int>("BusinessId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("PublicId")
+                                .IsRequired();
+
+                            b1.Property<string>("Url")
+                                .IsRequired();
+
+                            b1.HasKey("BusinessId", "__synthesizedOrdinal");
+
+                            b1.ToTable("Businesses");
+
+                            b1
+                                .ToJson("BusinessGallery")
+                                .HasColumnType("jsonb");
+
+                            b1.WithOwner()
+                                .HasForeignKey("BusinessId");
+                        });
+
+                    b.Navigation("BusinessGallery");
+
                     b.Navigation("Owner");
                 });
 

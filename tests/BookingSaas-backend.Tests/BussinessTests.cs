@@ -734,6 +734,7 @@ public sealed class BussinessTests : IAsyncLifetime
     private sealed record AuthResponse(UserResponse User, string AccessToken, string RefreshToken);
     private sealed record UserResponse(string UserId, string Name, string PhoneNumber);
     private sealed record SessionResponse(bool Authenticated, UserResponse User, string[] Roles);
+    private sealed record BusinessGalleryImageDto(string Url, string PublicId);
     private sealed record BusinessDto(
         int Id,
         string Name,
@@ -741,6 +742,7 @@ public sealed class BussinessTests : IAsyncLifetime
         string Address,
         string? Description,
         string? ProfileImageUrl,
+        IReadOnlyList<BusinessGalleryImageDto> BusinessGallery,
         string OwnerId);
     private sealed record BusinessDetailsDto(
         int Id,
@@ -749,6 +751,7 @@ public sealed class BussinessTests : IAsyncLifetime
         string Address,
         string? Description,
         string? ProfileImageUrl,
+        IReadOnlyList<BusinessGalleryImageDto> BusinessGallery,
         string OwnerId,
         IReadOnlyList<PublicEmployeeDto> Employees);
     private sealed record PublicEmployeeDto(

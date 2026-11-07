@@ -73,6 +73,7 @@
 | TimeZoneId | `string` | required, max 100, default `Asia/Tehran` (migration `BookingDomainFoundation` not applied) |
 | Description | `string?` | |
 | ProfileImageUrl / ProfileImagePublicId | `string?` | |
+| BusinessGallery | `List<BusinessGalleryImage>` (jsonb) | Optional; each item `{ Url, PublicId }`; max 10 via API |
 | OwnerId | `string` | FK → user, **1 owner = 1 business** |
 | Services / Employees | collections | |
 
@@ -257,6 +258,8 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
 | DELETE | `/{id}` | `Admin` | — | `204` |
 | POST | `/image` | Authorize (owner’s business) | form `file` | `{ message, profileImageUrl }` |
 | DELETE | `/image` | Authorize | — | `{ message }` |
+| POST | `/gallery` | Authorize (owner’s business) | form `files` (multi, optional after create/edit) | `{ message, businessGallery }` |
+| DELETE | `/gallery?publicId=` | Authorize | query `publicId` | `{ message, businessGallery }` |
 | POST | `/register` | Authorize | `CreateBusinessDto` | `AuthResponseDto` (new token with `BusinessOwner` role) |
 
 **CreateBusinessDto / UpdateBusinessDto** (same shape; update DTO unused)
@@ -280,6 +283,7 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
   "address": "string",
   "description": "string|null",
   "profileImageUrl": "string|null",
+  "businessGallery": [{ "url": "string", "publicId": "string" }],
   "ownerId": "string"
 }
 ```
@@ -293,6 +297,7 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
   "address": "string",
   "description": "string|null",
   "profileImageUrl": "string|null",
+  "businessGallery": [{ "url": "string", "publicId": "string" }],
   "ownerId": "string",
   "employees": [
     {
@@ -332,6 +337,8 @@ Images: JPG/PNG/WebP, max 5MB, folder `booking-saas/profiles`.
 ```
 
 Business images folder: `booking-saas/businesses`.  
+Business gallery folder: `booking-saas/businesses/gallery` (max **10** images; JPG/PNG/WebP; 5 MB each).  
+Create/register/update stay JSON; gallery is uploaded via `POST /gallery` after create or during edit.  
 `/register` refuses if user already owns a business (`409`).
 
 ---
@@ -652,6 +659,7 @@ Rules (create): business/service/employee must exist and share business; employe
 | `20261101_BookingActiveOverlapExclusion` | `btree_gist` + partial EXCLUDE on active booking time ranges (**not applied**) |
 | `20261102_EmployeeServiceOverrides` | `EmployeeServices.PriceOverride` + `DurationMinutesOverride` nullable (**not applied**) |
 | `20261102_BookingPriceSnapshot` | `Bookings.Price` nullable snapshot (**not applied**) |
+| `20261107_AddBusinessGallery` | `Businesses.BusinessGallery` jsonb owned collection (**not applied**) |
 
 ---
 

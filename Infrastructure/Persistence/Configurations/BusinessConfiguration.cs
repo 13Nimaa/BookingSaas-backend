@@ -13,6 +13,13 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.Property(b => b.Address).HasMaxLength(300);
         builder.Property(b => b.TimeZoneId).IsRequired().HasMaxLength(100).HasDefaultValue("Asia/Tehran");
 
+        builder.OwnsMany(b => b.BusinessGallery, gallery =>
+        {
+            gallery.ToJson();
+            gallery.Property(g => g.Url).IsRequired();
+            gallery.Property(g => g.PublicId).IsRequired();
+        });
+
         builder.HasOne(b => b.Owner)
             .WithOne(u => u.OwnedBusiness)
             .HasForeignKey<Business>(b => b.OwnerId)

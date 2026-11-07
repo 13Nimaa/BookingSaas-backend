@@ -12,5 +12,6 @@ public sealed record BusinessDetailsDto(
     string Address,
     string? Description,
     string? ProfileImageUrl,
+    IReadOnlyList<BusinessGalleryImageDto> BusinessGallery,
     string OwnerId,
     IReadOnlyList<PublicEmployeeDto> Employees);

@@ -7,8 +7,9 @@ public sealed record BusinessDto(
     string Address,
     string? Description,
     string? ProfileImageUrl,
+    IReadOnlyList<BusinessGalleryImageDto> BusinessGallery,
     string OwnerId);
+
 public sealed record MyBusinessResponse(
-bool HasBusiness,
-BusinessDto? Business
-);
+    bool HasBusiness,
+    BusinessDto? Business);

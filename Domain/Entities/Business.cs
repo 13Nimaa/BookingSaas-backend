@@ -11,6 +11,11 @@ public class Business
     public string? ProfileImageUrl { get; set; }
     public string? ProfileImagePublicId { get; set; }
 
+    /// <summary>
+    /// Optional gallery images (Cloudinary). Empty when none uploaded.
+    /// </summary>
+    public List<BusinessGalleryImage> BusinessGallery { get; set; } = new();
+
     public string OwnerId { get; set; } = default!;
     public ApplicationUser Owner { get; set; } = default!;
 
