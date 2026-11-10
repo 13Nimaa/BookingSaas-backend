@@ -35,11 +35,38 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 
 // ---------- CORS (frontend calls the API directly, no BFF) ----------
 // Origins are configurable via "Frontend:Origins" (see appsettings.json).
+// Railway: prefer Frontend__Origins__0 / __1, or a single comma-separated
+// Frontend__Origins=https://a.com,https://b.com
 // Must be explicit origins (no AllowAnyOrigin) because the frontend sends
 // credentials ("credentials: include") and an Authorization header.
-var frontendOrigins = builder.Configuration
-    .GetSection("Frontend:Origins")
-    .Get<string[]>() ?? ["http://localhost:3000"];
+static string[] ResolveFrontendOrigins(IConfiguration configuration)
+{
+    var fromArray = configuration.GetSection("Frontend:Origins").Get<string[]>();
+    if (fromArray is { Length: > 0 })
+    {
+        return fromArray
+            .Select(o => o?.Trim().TrimEnd('/'))
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    var csv = configuration["Frontend:Origins"];
+    if (!string.IsNullOrWhiteSpace(csv))
+    {
+        return csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(o => o.TrimEnd('/'))
+            .Where(o => o.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    return ["http://localhost:3000"];
+}
+
+var frontendOrigins = ResolveFrontendOrigins(builder.Configuration);
+Console.WriteLine($"CORS origins: {string.Join(", ", frontendOrigins)}");
 
 builder.Services.AddCors(options =>
 {
