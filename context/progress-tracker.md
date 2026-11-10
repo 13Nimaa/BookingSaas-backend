@@ -1,9 +1,19 @@
 # Backend progress
 
 **Last updated:** 2026-11-10  
-**Current task:** Docker deploy image — **Complete**  
-**Prior:** Build entry / MSB1011 fix  
+**Current task:** CORS — allow Netlify frontend origin  
+**Prior:** Docker deploy image — **Complete**  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# CORS (`Frontend:Origins`)
+
+| Area | Status |
+|------|--------|
+| Added `https://barber-crm.netlify.app` alongside `http://localhost:4000` in `appsettings.json` | Done |
+
+Note: CORS origins must omit trailing slash. Prod Docker can still override via `Frontend__Origins__0` / `__1`.
 
 ---
 
