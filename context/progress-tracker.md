@@ -1,9 +1,26 @@
 # Backend progress
 
 **Last updated:** 2026-11-10  
-**Current task:** Build entry — removed solution file so bare `dotnet build` works  
-**Prior:** Customer dashboard API — complete  
+**Current task:** Docker deploy image — **Complete**  
+**Prior:** Build entry / MSB1011 fix  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Docker deploy (`Dockerfile`)
+
+| Area | Status |
+|------|--------|
+| Multi-stage `Dockerfile` (sdk:10.0 → aspnet:10.0) | Done |
+| `.dockerignore` (tests, context, bin/obj, secrets) | Done |
+| Listens on `8080`; config via env (`ConnectionStrings__*`, `Jwt__*`, `Frontend__Origins__*`, Cloudinary) | Done |
+
+```bash
+docker build -t bookingsaas-api .
+docker run --rm -p 8080:8080 -e ConnectionStrings__DefaultConnection="..." -e Jwt__Key="..." bookingsaas-api
+```
+
+Postgres + migrations remain external (not applied by the image).
 
 ---
 

@@ -27,7 +27,7 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 ## Production / config (Phase 11)
 
 1. **Committed DB credentials** in `appsettings.json` — treat as leaked for any shared/prod use; use env / secret store; do not ship as-is.
-2. **No `appsettings.Production.json` / `.env.example`** — prod values (connection, JWT key, CORS origins, Cloudinary) under-documented.
+2. **No `appsettings.Production.json` / `.env.example`** — prod values (connection, JWT key, CORS origins, Cloudinary) under-documented. `Dockerfile` exists; pass secrets via env (`ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Frontend__Origins__0`, Cloudinary). No compose stack yet.
 3. **`Frontend:Origins` is `http://localhost:4000`** while some docs still mention `3000`.
 4. **Cloudinary** empty in repo — image upload fails until configured.
 5. **`PendingBookingExpirationService` has no single-leader guard** — N replicas ⇒ N pollers (idempotent, extra load).
