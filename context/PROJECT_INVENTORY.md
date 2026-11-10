@@ -42,7 +42,10 @@
 | `ITokenService` | `TokenService` | Registered |
 | `ICustomerService` | `CustomerService` | Registered |
 | `IImageUploadService` | `CloudinaryImageUploadService` | Registered |
-| `IBookingService` | `BookingService` | Registered (create, availability, status, list, mine, detail, expire) |
+| `IBookingService` | `BookingService` | Registered (create, availability, status, cancel-mine, list, mine, detail, expire) |
+| `IDashboardService` | `DashboardService` | Owner business dashboard |
+| `ICustomerDashboardService` | `CustomerDashboardService` | Customer home dashboard |
+| `IBusinessFavoriteService` | `BusinessFavoriteService` | Favorite salons |
 | (hosted) | `PendingBookingExpirationService` | `AddHostedService` — Pending→Expired poller |
 
 ---
@@ -165,6 +168,16 @@ Composite PK `(EmployeesId, ServicesId)` prevents duplicates. Cascade delete wit
 
 Index on `(EmployeeId, StartTime)` for overlap checks — **never used by any endpoint**.  
 **Decision needed:** keep `Booking` and drop `Appointment`, or unify them.
+
+### `BusinessFavorite`
+| Field | Type | Notes |
+|-------|------|-------|
+| Id | `int` | |
+| UserId | `string` | Cascade with user |
+| BusinessId | `int` | Cascade with business |
+| CreatedAt | `DateTime` | UtcNow |
+
+Unique index `(UserId, BusinessId)`. Migration `AddBusinessFavorites` **not applied** outside Testcontainers.
 
 ### `RefreshToken`
 | Field | Type | Notes |
@@ -517,11 +530,23 @@ Missing: delete, search, link to user, booking history for customer.
 |--------|------|------|---------|----------|
 | GET | `/` | `BusinessOwner` or `Employee` | query: `status`, `employeeId`, `customerId`, `serviceId`, `fromDate`, `toDate`, `search`, `page`, `pageSize` | `200` `PagedResult<BookingListItemDto>` |
 | GET | `/mine` | Authorize | query: `status`, `fromDate`, `toDate`, `page`, `pageSize` | `200` `PagedResult<CustomerBookingListItemDto>` |
-| GET | `/{bookingId}` | `BusinessOwner` or `Employee` | — | `200` `BookingDetailsDto` |
+| GET | `/{bookingId}` | Authorize (owner/employee scoped, or own `Customer.UserId`) | — | `200` `BookingDetailsDto` |
+| POST | `/{bookingId}/cancel` | Authorize (own booking only) | — | `200` `BookingDto` (Cancelled) |
 | POST | `/` | Authorize | `CreateBookingDto` | `201` `BookingDto` |
 | POST | `/guest` | Public | `CreateGuestBookingDto` | `201` `BookingDto` |
 | GET | `/availability` | Public | query: `businessId`, `serviceId`, `employeeId`, `date` | `200` `AvailabilitySlotDto[]` |
 | PATCH | `/{bookingId}/status` | `BusinessOwner` + must own booking's business | `UpdateBookingStatusDto` | `200` `BookingDto` |
+
+### 3.8b Customer portal — `api/customer`
+
+| Method | Path | Auth | Request | Response |
+|--------|------|------|---------|----------|
+| GET | `/dashboard` | Authorize | — | `200` `CustomerDashboardDto` |
+| GET | `/favorites` | Authorize | — | `200` `BusinessFavoriteDto[]` |
+| POST | `/favorites` | Authorize | `AddBusinessFavoriteDto` `{ businessId }` | `200` `BusinessFavoriteDto` |
+| DELETE | `/favorites/{businessId}` | Authorize | — | `{ message }` |
+
+Dashboard: upcoming = Pending/Confirmed with `StartTime >= UtcNow`; widgets capped at 5 items; favorites count from `BusinessFavorites`. No rating/discount fields.
 
 **CreateBookingDto** (CustomerId/UserId not accepted; identity from JWT)
 ```json
@@ -660,6 +685,7 @@ Rules (create): business/service/employee must exist and share business; employe
 | `20261102_EmployeeServiceOverrides` | `EmployeeServices.PriceOverride` + `DurationMinutesOverride` nullable (**not applied**) |
 | `20261102_BookingPriceSnapshot` | `Bookings.Price` nullable snapshot (**not applied**) |
 | `20261107_AddBusinessGallery` | `Businesses.BusinessGallery` jsonb owned collection (**not applied**) |
+| `20261107_AddBusinessFavorites` | `BusinessFavorites` table unique (UserId, BusinessId) (**not applied**) |
 
 ---
 
@@ -707,6 +733,9 @@ Password policy: min length 6, non-alphanumeric not required.
 | Booking list (owner/employee) | Done (`GET /api/bookings`) |
 | Booking detail (owner/employee) | Done (`GET /api/bookings/{id}`) |
 | Booking mine (customer history) | Done (`GET /api/bookings/mine`) |
+| Customer dashboard (summary / upcoming / recent) | Done (`GET /api/customer/dashboard`) |
+| Favorite salons | Done (`/api/customer/favorites`) |
+| Customer self-cancel | Done (`POST /api/bookings/{id}/cancel`) |
 | Payments / notifications / reviews | Missing |
 | Admin seeding / role management API | Missing |
 | Soft delete / audit | Missing |
@@ -721,7 +750,8 @@ Password policy: min length 6, non-alphanumeric not required.
    - ~~`GET /api/bookings/mine` — customer’s bookings~~ Done (Phase 10).
    - ~~Owner/employee list~~ Done (`GET /api/bookings` with filters/pagination).
    - ~~`PATCH /api/bookings/{id}/status` — Confirm / Cancel / Complete~~ Done (Phase 6).
-   - Customer self-cancel / reschedule — still missing.
+   - ~~Customer self-cancel~~ Done (`POST /api/bookings/{id}/cancel`).
+   - Customer reschedule — still missing.
 3. ~~Fill **`BookingDto`** response shape.~~ Done.
 4. ~~**Availability API:** given business/employee/service/date → free slots from working hours − existing bookings (and service duration).~~ Done.
 5. ~~**Overlap validation** on create~~ — Done (Phase 5 Postgres EXCLUDE; apply migration when ready).

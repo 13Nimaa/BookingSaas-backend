@@ -17,6 +17,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<WorkingHour> WorkingHours => Set<WorkingHour>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<BusinessFavorite> BusinessFavorites => Set<BusinessFavorite>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

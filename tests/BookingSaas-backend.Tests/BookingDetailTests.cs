@@ -110,7 +110,7 @@ public sealed class BookingDetailTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Customer_cannot_access_booking_details()
+    public async Task Unrelated_customer_cannot_access_booking_details()
     {
         var setup = await CreateBookableSetupAsync("09128000006");
         var booking = await CreateGuestBookingAsync(
@@ -121,6 +121,24 @@ public sealed class BookingDetailTests : IAsyncLifetime
             HttpMethod.Get, $"/api/bookings/{booking.Id}", customer.AccessToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Customer_can_retrieve_own_booking_details()
+    {
+        var setup = await CreateBookableSetupAsync("09128000016");
+        var customer = await RegisterCustomerAsync("09128200016");
+        var booking = await CreateUserBookingAsync(
+            setup, customer.AccessToken, DateTime.UtcNow.AddDays(1));
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get, $"/api/bookings/{booking.Id}", customer.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var detail = await ReadAsync<BookingDetailsDto>(response);
+        Assert.Equal(booking.Id, detail.Id);
+        Assert.Equal(setup.BusinessId, detail.Business.Id);
+        Assert.Equal(setup.BusinessId, detail.BusinessId);
     }
 
     [Fact]
@@ -187,6 +205,7 @@ public sealed class BookingDetailTests : IAsyncLifetime
         Assert.True(root.TryGetProperty("business", out var business));
         Assert.True(business.TryGetProperty("id", out _));
         Assert.True(business.TryGetProperty("name", out _));
+        Assert.True(business.TryGetProperty("profileImageUrl", out _));
 
         var detail = JsonSerializer.Deserialize<BookingDetailsDto>(payload, JsonOptions);
         Assert.NotNull(detail);
@@ -239,6 +258,28 @@ public sealed class BookingDetailTests : IAsyncLifetime
             name,
             phoneNumber = phone
         });
+
+        response.EnsureSuccessStatusCode();
+        return await ReadAsync<BookingDto>(response);
+    }
+
+    private async Task<BookingDto> CreateUserBookingAsync(
+        SetupContext setup,
+        string customerToken,
+        DateTime startTime)
+    {
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "/api/bookings",
+            customerToken,
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                employeeId = setup.EmployeeId,
+                startTime,
+                endTime = startTime.AddMinutes(30)
+            });
 
         response.EnsureSuccessStatusCode();
         return await ReadAsync<BookingDto>(response);
@@ -423,7 +464,7 @@ public sealed class BookingDetailTests : IAsyncLifetime
     private sealed record BookingDetailsCustomerDto(int Id, string Name, string? PhoneNumber);
     private sealed record BookingDetailsServiceDto(int Id, string Name, int DurationMinutes, decimal? Price);
     private sealed record BookingDetailsEmployeeDto(int Id, string Name, string? ProfileImageUrl);
-    private sealed record BookingDetailsBusinessDto(int Id, string Name);
+    private sealed record BookingDetailsBusinessDto(int Id, string Name, string? ProfileImageUrl);
     private sealed record BookingDetailsDto(
         int Id,
         int BusinessId,

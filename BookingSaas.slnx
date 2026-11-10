@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="BookingSaas-backend.csproj" />
-  <Project Path="tests\BookingSaas-backend.Tests\BookingSaas-backend.Tests.csproj" />
-</Solution>

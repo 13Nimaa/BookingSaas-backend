@@ -581,7 +581,8 @@ Creator:
 
 ## 17. Out of scope for MVP FE (do not invent)
 
-- Customer self-cancel / reschedule  
+- ~~Customer self-cancel~~ → `POST /api/bookings/{id}/cancel` (see `Customer-Dashboard-API-frontend.md`)
+- Customer reschedule  
 - Owner create-on-behalf (`BusinessOwner` creator type unused in create APIs)  
 - Guest lookup by phone  
 - Notifications / payments  

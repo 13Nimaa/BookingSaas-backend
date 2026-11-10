@@ -21,6 +21,11 @@ public interface IBookingService
         string ownerId,
         UpdateBookingStatusDto dto);
 
+    /// <summary>
+    /// Customer self-cancel: Pending or Confirmed → Cancelled, scoped by Customer.UserId.
+    /// </summary>
+    Task<Booking> CancelMineAsync(int bookingId, string userId);
+
     Task<PagedResult<BookingListItemDto>> ListAsync(
         string userId,
         bool isOwner,

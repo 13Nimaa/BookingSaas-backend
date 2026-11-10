@@ -1,9 +1,71 @@
 # Backend progress
 
-**Last updated:** 2026-11-07  
-**Current task:** Business gallery images — **Complete**  
-**Prior:** Public business detail — employees / assignments / hours — complete  
+**Last updated:** 2026-11-10  
+**Current task:** Build entry — removed solution file so bare `dotnet build` works  
+**Prior:** Customer dashboard API — complete  
 **Docs:** Agent context suite added (`AGENTS.md`, overview, architecture, standards, workflow, issues)
+
+---
+
+# Build entry (MSB1011)
+
+| Area | Status |
+|------|--------|
+| Removed root `.slnx` / `.sln` (conflicted with root `.csproj`) | Done |
+| Bare `dotnet build` builds `BookingSaas-backend.csproj` | Done |
+| Docs updated (`context/tests/create-test-feature.md`) | Done |
+
+```bash
+dotnet build
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj
+```
+
+---
+
+# Customer dashboard (`CustomerDashboard` + favorites + self-cancel)
+
+Spec: `context/feature spec/19-customer-dashboard-api.md`
+
+| Area | Status |
+|------|--------|
+| `GET /api/customer/dashboard` (summary + upcoming + recent) | Done |
+| Favorites entity + `GET/POST/DELETE /api/customer/favorites` | Done |
+| `POST /api/bookings/{id}/cancel` customer self-cancel | Done |
+| `GET /api/bookings/{id}` allows own booking (Customer.UserId) | Done |
+| `BookingDetailsBusinessDto.profileImageUrl` | Done |
+| Rating / discount / notifications | Out of scope |
+| Migration `20261107214850_AddBusinessFavorites` (created, **not applied**) | Done |
+| Integration tests (`CustomerDashboardTests` + detail own-booking) | Done — **20 passed** |
+| FE docs + inventory updated | Done |
+
+## Test run
+
+```bash
+dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --filter "FullyQualifiedName~CustomerDashboardTests|FullyQualifiedName~BookingDetailTests" --verbosity minimal
+```
+
+Result: **20 total — 20 passed**. Migration **not applied**.
+
+## Files
+
+| Path | Role |
+|------|------|
+| `Domain/Entities/BusinessFavorite.cs` | Favorite salon |
+| `Infrastructure/Persistence/Configurations/BusinessFavoriteConfiguration.cs` | Unique (UserId, BusinessId) |
+| `Infrastructure/Services/BusinessFavoriteService.cs` | Favorites CRUD |
+| `Infrastructure/Services/CustomerDashboardService.cs` | Aggregation |
+| `Controllers/CustomerDashboardController.cs` | Dashboard + favorites HTTP |
+| `Controllers/BookingController.cs` | Cancel + detail auth |
+| `Infrastructure/Services/BookingService.Cs` | `CancelMineAsync` + own-detail |
+| `Migrations/20261107214850_AddBusinessFavorites.cs` | BusinessFavorites table |
+| `context/Customer-Dashboard-API-frontend.md` | FE guide |
+| `tests/.../CustomerDashboardTests.cs` | Coverage |
+
+## Migration apply (on request)
+
+```bash
+dotnet ef database update AddBusinessFavorites --project BookingSaas-backend.csproj
+```
 
 ---
 
@@ -741,6 +803,6 @@ CRM fields, validators, list/query, soft-active behavior — see inventory. Spec
 
 # Next
 
-1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides`, `BookingPriceSnapshot` — only on request).
-2. Frontend: wire EmployeeService overrides + booking `price` snapshot (see `Booking-MVP-frontend.md`).
-3. Later booking phases: customer self-cancel / reschedule — only when specified.
+1. Apply pending migrations when ready (`BookingDomainFoundation`, `BookingActiveOverlapExclusion`, `EmployeeServiceOverrides`, `BookingPriceSnapshot`, `AddBusinessGallery`, `AddBusinessFavorites` — only on request).
+2. Frontend: wire customer dashboard + favorites + cancel (see `Customer-Dashboard-API-frontend.md`).
+3. Later: customer reschedule / owner-create-on-behalf — only when specified.

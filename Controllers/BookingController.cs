@@ -56,7 +56,7 @@ public class BookingController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = "BusinessOwner,Employee")]
+    [Authorize]
     [HttpGet("{bookingId:int}")]
     public async Task<ActionResult<BookingDetailsDto>> GetById(int bookingId)
     {
@@ -80,6 +80,37 @@ public class BookingController : ControllerBase
         catch (UnauthorizedAccessException)
         {
             return Forbid();
+        }
+    }
+
+    /// <summary>
+    /// Customer self-cancel. Only the booking owner (Customer.UserId) may cancel;
+    /// Pending or Confirmed → Cancelled.
+    /// </summary>
+    [Authorize]
+    [HttpPost("{bookingId:int}/cancel")]
+    public async Task<ActionResult<BookingDto>> CancelMine(int bookingId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        try
+        {
+            var booking = await _bookingService.CancelMineAsync(bookingId, userId);
+            return Ok(ToDto(booking));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
         }
     }
 

@@ -144,6 +144,27 @@ public class BookingService : IBookingService
         return booking;
     }
 
+    public async Task<Booking> CancelMineAsync(int bookingId, string userId)
+    {
+        var booking = await _context.Bookings
+            .Include(b => b.Customer)
+            .FirstOrDefaultAsync(b => b.Id == bookingId);
+
+        if (booking is null)
+            throw new KeyNotFoundException("رزرو یافت نشد.");
+
+        if (booking.Customer.UserId != userId)
+            throw new UnauthorizedAccessException();
+
+        if (booking.Status is not (BookingStatus.Pending or BookingStatus.Confirmed))
+            throw new ArgumentException("لغو این رزرو مجاز نیست.");
+
+        booking.Status = BookingStatus.Cancelled;
+        await _context.SaveChangesAsync();
+
+        return booking;
+    }
+
     public async Task<PagedResult<BookingListItemDto>> ListAsync(
         string userId,
         bool isOwner,
@@ -295,46 +316,54 @@ public class BookingService : IBookingService
         var booking = await _context.Bookings
             .AsNoTracking()
             .Where(b => b.Id == bookingId)
-            .Select(b => new BookingDetailsDto(
-                b.Id,
-                b.BusinessId,
-                b.StartTime,
-                b.EndTime,
-                b.Status,
-                b.CreatorType,
-                b.CreatedAt,
-                b.Notes,
-                new BookingDetailsCustomerDto(
-                    b.Customer.Id,
-                    b.Customer.Name,
-                    b.Customer.PhoneNumber),
-                new BookingDetailsServiceDto(
-                    b.Service.Id,
-                    b.Service.Title,
-                    b.Service.DurationMinutes,
-                    b.Price),
-                new BookingDetailsEmployeeDto(
-                    b.Employee.Id,
-                    b.Employee.User.FullName,
-                    b.Employee.User.ProfileImageUrl),
-                new BookingDetailsBusinessDto(
-                    b.Business.Id,
-                    b.Business.Name)))
+            .Select(b => new
+            {
+                Dto = new BookingDetailsDto(
+                    b.Id,
+                    b.BusinessId,
+                    b.StartTime,
+                    b.EndTime,
+                    b.Status,
+                    b.CreatorType,
+                    b.CreatedAt,
+                    b.Notes,
+                    new BookingDetailsCustomerDto(
+                        b.Customer.Id,
+                        b.Customer.Name,
+                        b.Customer.PhoneNumber),
+                    new BookingDetailsServiceDto(
+                        b.Service.Id,
+                        b.Service.Title,
+                        b.Service.DurationMinutes,
+                        b.Price),
+                    new BookingDetailsEmployeeDto(
+                        b.Employee.Id,
+                        b.Employee.User.FullName,
+                        b.Employee.User.ProfileImageUrl),
+                    new BookingDetailsBusinessDto(
+                        b.Business.Id,
+                        b.Business.Name,
+                        b.Business.ProfileImageUrl)),
+                CustomerUserId = b.Customer.UserId,
+                EmployeeId = b.EmployeeId
+            })
             .FirstOrDefaultAsync();
 
         if (booking is null)
             throw new KeyNotFoundException("رزرو یافت نشد.");
 
+        // Own booking always allowed (customer dashboard / mine detail).
+        if (booking.CustomerUserId == userId)
+            return booking.Dto;
+
         if (isOwner)
         {
             var ownsBusiness = await _context.Businesses
                 .AsNoTracking()
-                .AnyAsync(b => b.Id == booking.BusinessId && b.OwnerId == userId);
+                .AnyAsync(b => b.Id == booking.Dto.BusinessId && b.OwnerId == userId);
 
-            if (!ownsBusiness)
-                throw new UnauthorizedAccessException();
-
-            return booking;
+            if (ownsBusiness)
+                return booking.Dto;
         }
 
         if (isEmployee)
@@ -345,10 +374,8 @@ public class BookingService : IBookingService
                 .Select(e => (int?)e.Id)
                 .FirstOrDefaultAsync();
 
-            if (employeeId is null || booking.Employee.Id != employeeId.Value)
-                throw new UnauthorizedAccessException();
-
-            return booking;
+            if (employeeId is not null && booking.EmployeeId == employeeId.Value)
+                return booking.Dto;
         }
 
         throw new UnauthorizedAccessException();

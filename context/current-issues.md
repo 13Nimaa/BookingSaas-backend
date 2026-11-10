@@ -41,8 +41,10 @@ Tracked findings that should not be silently “fixed” during unrelated work. 
 3. **Phase 5 exclusion migration not applied:** `20261101201947_BookingActiveOverlapExclusion` (`btree_gist` + active-booking overlap exclude) exists in repo; Testcontainers apply it via `MigrateAsync`. Local/Docker app DBs need explicit `database update`.
 3b. **EmployeeService overrides migration not applied:** `20261102103531_EmployeeServiceOverrides` (`PriceOverride`, `DurationMinutesOverride`) exists in repo; Testcontainers apply via `MigrateAsync`.
 3c. **Booking price snapshot migration not applied:** `20261102130009_BookingPriceSnapshot` (`Bookings.Price` nullable) exists in repo; Testcontainers apply via `MigrateAsync`. Legacy rows keep `Price = null` (no invented historical prices).
+3d. **Business gallery migration not applied:** `20261107071441_AddBusinessGallery`.
+3e. **Business favorites migration not applied:** `20261107214850_AddBusinessFavorites`.
 4. **Availability is informational only** — `GET /api/bookings/availability` does not reserve slots; create enforces overlap via DB exclusion (after Phase 5 migration is applied).
-5. **No owner-create-on-behalf endpoint** yet (`GET /api/bookings/mine` customer history is live; owner/employee list + detail exist).
+5. **No owner-create-on-behalf endpoint** yet (`GET /api/bookings/mine` + customer dashboard + self-cancel are live; owner/employee list + detail exist).
 6. **Create DTOs expose `EndTime` but service ignores it** — `EndTime` is always `StartTime + DurationMinutes`; clients can send a mismatched value with no validation (contract footgun).
 7. **Inconsistent error bodies** — booking business errors often return plain string; FluentValidation returns ProblemDetails-style validation errors.
 8. **`CreatedAtAction` on create** points at create action names, not `GET api/bookings/{id}` — weak `Location` header.

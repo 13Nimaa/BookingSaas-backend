@@ -6,7 +6,7 @@ Now implement the missing test infrastructure and create meaningful automated te
 
 ## 1. Inspect Before Changing
 
-- Inspect `BookingSaas.slnx`, `BookingSaas-backend.csproj`, target framework, project structure, dependency injection, and authentication implementation.
+- Inspect `BookingSaas-backend.csproj`, target framework, project structure, dependency injection, and authentication implementation.
 - Identify the actual Auth endpoints, DTOs, Identity configuration, JWT configuration, and refresh-token behavior.
 - Check the existing EF Core provider and database configuration.
 - Do not guess namespaces or production behavior.
@@ -17,8 +17,7 @@ Now implement the missing test infrastructure and create meaningful automated te
 Create a backend test project using xUnit and the compatible ASP.NET Core integration-testing packages for the repository's target framework.
 
 - Follow the existing naming conventions.
-- Add the test project to `BookingSaas.slnx`.
-- Reference the backend project.
+- Reference the backend project from the test `.csproj`.
 - Configure test discovery so `dotnet test` actually discovers and executes the tests.
 - Use compatible package versions.
 - Avoid unnecessary dependencies.
@@ -52,7 +51,7 @@ For each test, verify meaningful behavior rather than merely asserting that the 
 
 Run:
 
-`dotnet test BookingSaas.slnx --no-restore -v normal`
+`dotnet test tests/BookingSaas-backend.Tests/BookingSaas-backend.Tests.csproj --no-restore -v normal`
 
 If newly added test dependencies have not been restored, run the appropriate restore command before testing.
 

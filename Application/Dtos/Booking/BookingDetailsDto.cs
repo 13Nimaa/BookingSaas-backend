@@ -34,4 +34,5 @@ public sealed record BookingDetailsEmployeeDto(
 
 public sealed record BookingDetailsBusinessDto(
     int Id,
-    string Name);
+    string Name,
+    string? ProfileImageUrl);
