@@ -91,7 +91,17 @@ builder.Services.AddCors(options =>
 
 // ---------- JWT Authentication ----------
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var secretKey = jwtSettings["Key"]!;
+var secretKey = jwtSettings["Key"];
+if (string.IsNullOrWhiteSpace(secretKey))
+    throw new InvalidOperationException(
+        "Jwt:Key is missing. Set Railway variable Jwt__Key (or User Secrets locally).");
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection is missing. Set Railway variable ConnectionStrings__DefaultConnection.");
+
+Console.WriteLine("Startup config OK: Jwt:Key present, DefaultConnection present.");
 
 builder.Services.AddAuthentication(options =>
 {

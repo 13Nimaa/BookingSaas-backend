@@ -26,8 +26,9 @@ RUN dotnet publish BookingSaas-backend.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-ENV ASPNETCORE_URLS=http://+:8080 \
-    ASPNETCORE_ENVIRONMENT=Production
+# Railway injects PORT at runtime; default 8080 for local docker runs.
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    PORT=8080
 
 EXPOSE 8080
 
@@ -35,4 +36,6 @@ COPY --from=build /app/publish .
 
 USER $APP_UID
 
-ENTRYPOINT ["dotnet", "BookingSaas-backend.dll"]
+# Bind to Railway's $PORT (not a baked ASPNETCORE_URLS) or the proxy returns 502,
+# which browsers mis-report as a CORS error.
+ENTRYPOINT ["sh", "-c", "dotnet BookingSaas-backend.dll --urls http://0.0.0.0:${PORT:-8080}"]
